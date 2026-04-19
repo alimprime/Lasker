@@ -1,4 +1,4 @@
-// ChessMate content script controller.
+// Lasker content script controller.
 //
 // Responsibilities:
 //   - Wait for a chess.com board to appear.
@@ -17,7 +17,7 @@
   "use strict";
 
   const POLL_MS = 500;
-  const STORAGE_KEY = "chessmate.settings";
+  const STORAGE_KEY = "lasker.settings";
   const DEFAULT_SETTINGS = {
     enabled: false,
     depth: 15,
@@ -44,7 +44,7 @@
     labelSnapshotted: false,
   };
 
-  function log(...args) { console.log("[ChessMate]", ...args); }
+  function log(...args) { console.log("[Lasker]", ...args); }
 
   function loadSettings() {
     return new Promise((resolve) => {
@@ -65,10 +65,10 @@
 
   function waitForBoard() {
     return new Promise((resolve) => {
-      const existing = window.ChessMateBoardReader.findBoard();
+      const existing = window.LaskerBoardReader.findBoard();
       if (existing) return resolve(existing);
       const observer = new MutationObserver(() => {
-        const b = window.ChessMateBoardReader.findBoard();
+        const b = window.LaskerBoardReader.findBoard();
         if (b) { observer.disconnect(); resolve(b); }
       });
       observer.observe(document.documentElement, { childList: true, subtree: true });
@@ -77,13 +77,13 @@
 
   function ensureEngine() {
     if (state.engine) return state.engine;
-    state.engine = new window.ChessMateEngine({
+    state.engine = new window.LaskerEngine({
       multiPv: 3,
       onInfo: handleEngineInfo,
       onBestMove: () => {},
       onError: (err) => {
         log("engine error:", err);
-        window.ChessMateOverlay.setStatus("engine error");
+        window.LaskerOverlay.setStatus("engine error");
       },
     });
     return state.engine;
@@ -105,7 +105,7 @@
       .filter(Boolean)
       .map((i) => ({ scoreCp: i.scoreCp, scoreMate: i.scoreMate, pv: i.pv }));
 
-    window.ChessMateOverlay.setEvaluation({
+    window.LaskerOverlay.setEvaluation({
       scoreCp: primary.scoreCp,
       scoreMate: primary.scoreMate,
       depth: state.currentDepth,
@@ -114,19 +114,19 @@
       playerColor: state.playerColor,
     });
 
-    const assess = window.ChessMateLabels.assessPosition({
+    const assess = window.LaskerLabels.assessPosition({
       scoreCp: primary.scoreCp,
       scoreMate: primary.scoreMate,
       turn: state.turn,
     });
-    window.ChessMateOverlay.setAssessment(assess);
+    window.LaskerOverlay.setAssessment(assess);
 
     renderEngineHint();
 
     // Once the engine has reached a decent depth on THIS position, snapshot
     // its white-perspective eval as the reference for the NEXT move's quality.
     if (!state.labelSnapshotted && state.currentDepth >= Math.max(10, state.settings.depth - 3)) {
-      const white = window.ChessMateLabels.toWhitePerspective(
+      const white = window.LaskerLabels.toWhitePerspective(
         primary.scoreCp, primary.scoreMate, state.turn
       );
       state.prevEval = { whiteCp: white.cp, whiteMate: white.mate };
@@ -139,20 +139,20 @@
 
   function classifyLastMove() {
     if (!state.lastMover) {
-      window.ChessMateOverlay.setLastMove(null);
+      window.LaskerOverlay.setLastMove(null);
       return;
     }
     const primary = state.currentLines[1];
     if (!primary) return;
     if (!state.prevRef) {
-      window.ChessMateOverlay.setLastMove(null);
+      window.LaskerOverlay.setLastMove(null);
       return;
     }
 
-    const currWhite = window.ChessMateLabels.toWhitePerspective(
+    const currWhite = window.LaskerLabels.toWhitePerspective(
       primary.scoreCp, primary.scoreMate, state.turn
     );
-    const result = window.ChessMateLabels.classifyMove({
+    const result = window.LaskerLabels.classifyMove({
       prevWhiteCp: state.prevRef.whiteCp,
       prevWhiteMate: state.prevRef.whiteMate,
       currWhiteCp: currWhite.cp,
@@ -160,7 +160,7 @@
       mover: state.lastMover,
       inBook: state.inBookNow,
     });
-    window.ChessMateOverlay.setLastMove(result);
+    window.LaskerOverlay.setLastMove(result);
   }
 
   // ---------------------------------------------------------------------------
@@ -203,23 +203,23 @@
   function renderEngineHint() {
     const primary = state.currentLines[1];
     if (!primary || !primary.pv || primary.pv.length === 0) {
-      window.ChessMateOverlay.setEngineHint(null);
+      window.LaskerOverlay.setEngineHint(null);
       return;
     }
     const uci = primary.pv[0];
     const san = uciToPseudoSan(uci, state.currentGrid);
     if (!san) {
-      window.ChessMateOverlay.setEngineHint(null);
+      window.LaskerOverlay.setEngineHint(null);
       return;
     }
-    const text = window.ChessMateEngineHints.describeMove({
+    const text = window.LaskerEngineHints.describeMove({
       san,
       mover: state.turn,
       currScoreCp: primary.scoreCp,
       currScoreMate: primary.scoreMate,
       inBook: state.inBookNow,
     });
-    window.ChessMateOverlay.setEngineHint({ text, source: "stockfish" });
+    window.LaskerOverlay.setEngineHint({ text, source: "stockfish" });
   }
 
   function initTurnFor(position) {
@@ -230,19 +230,19 @@
   }
 
   async function lookupOpening(fen) {
-    if (!window.ChessMateOpeningBook) return;
-    if (!window.ChessMateOpeningBook.isEarly(state.plyCount)) {
-      window.ChessMateOverlay.setOpening(null);
+    if (!window.LaskerOpeningBook) return;
+    if (!window.LaskerOpeningBook.isEarly(state.plyCount)) {
+      window.LaskerOverlay.setOpening(null);
       state.inBookNow = false;
       return;
     }
     const requestedFen = fen;
-    const op = await window.ChessMateOpeningBook.lookup(fen);
+    const op = await window.LaskerOpeningBook.lookup(fen);
     if (state.currentFen !== requestedFen) return;
     // Hand the FEN back to the overlay so it can build a "Study on Lichess"
     // deep-link for the exact current position.
     const enriched = op ? { ...op, fen } : null;
-    window.ChessMateOverlay.setOpening(enriched);
+    window.LaskerOverlay.setOpening(enriched);
     state.inBookNow = !!(op && op.name);
     // The move's "Book" classification depends on whether the NEW position is
     // in theory; re-classify with the fresh flag.
@@ -262,11 +262,11 @@
     state.prevEval = null;
     state.inBookNow = false;
 
-    const fen = window.ChessMateBoardReader.toFen(position, state.turn);
+    const fen = window.LaskerBoardReader.toFen(position, state.turn);
     state.currentFen = fen;
     state.currentGrid = position.grid || null;
     log("analyzing", fen);
-    window.ChessMateOverlay.setStatus("thinking...");
+    window.LaskerOverlay.setStatus("thinking...");
 
     // Track player color from board orientation.
     state.playerColor = position.flipped ? "b" : "w";
@@ -279,13 +279,13 @@
       engine.analyze(fen, state.settings.depth);
     } catch (err) {
       log("analyze failed:", err);
-      window.ChessMateOverlay.setStatus("engine error");
+      window.LaskerOverlay.setStatus("engine error");
     }
   }
 
   function tickPoll() {
     if (!state.settings.enabled) return;
-    const pos = window.ChessMateBoardReader.readPosition();
+    const pos = window.LaskerBoardReader.readPosition();
     if (!pos) return;
 
     if (state.lastHash === null) {
@@ -316,7 +316,7 @@
   function setEnabled(on) {
     state.settings.enabled = !!on;
     saveSettings(state.settings);
-    window.ChessMateOverlay.setEnabled(state.settings.enabled);
+    window.LaskerOverlay.setEnabled(state.settings.enabled);
     if (state.settings.enabled) {
       state.lastHash = null;
       state.prevEval = null;
@@ -351,30 +351,30 @@
   }
 
   async function main() {
-    if (window.__chessmateLoaded) return;
-    window.__chessmateLoaded = true;
+    if (window.__laskerLoaded) return;
+    window.__laskerLoaded = true;
 
     state.settings = await loadSettings();
 
     await waitForBoard();
     log("board found, mounting overlay");
 
-    window.ChessMateOverlay.mount({
+    window.LaskerOverlay.mount({
       onToggle: (on) => setEnabled(on),
       onDepthChange: (n) => setDepth(n),
       onThemeChange: (t) => setTheme(t),
       onSizeChange: (s) => setSize(s),
     });
-    window.ChessMateOverlay.setTheme(state.settings.theme);
-    window.ChessMateOverlay.setSize(state.settings.size);
-    window.ChessMateOverlay.setDepth(state.settings.depth);
-    window.ChessMateOverlay.setEnabled(state.settings.enabled);
+    window.LaskerOverlay.setTheme(state.settings.theme);
+    window.LaskerOverlay.setSize(state.settings.size);
+    window.LaskerOverlay.setDepth(state.settings.depth);
+    window.LaskerOverlay.setEnabled(state.settings.enabled);
 
     if (state.settings.enabled) startPolling();
 
     try {
       chrome.runtime.onMessage.addListener((msg) => {
-        if (msg && msg.type === "chessmate:toggle") {
+        if (msg && msg.type === "lasker:toggle") {
           setEnabled(!state.settings.enabled);
         }
       });

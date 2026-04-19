@@ -13,7 +13,7 @@
 // hand-curated popularity tier first, then ECO, so the hints that matter sit
 // at the top.
 //
-// Exposes window.ChessMateOpeningBook with:
+// Exposes window.LaskerOpeningBook with:
 //   - lookup(fen) -> Promise<{ name, eco, moves } | null>
 //       moves[i]: { san, uci, name, eco, popular }
 //   - isEarly(plyCount) -> true while the game is still in the opening phase
@@ -101,11 +101,11 @@
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         DB = await resp.json();
         console.log(
-          `[ChessMate] openings DB loaded: ${Object.keys(DB.names || {}).length} named positions, ${Object.keys(DB.nextByEpd || {}).length} parents`
+          `[Lasker] openings DB loaded: ${Object.keys(DB.names || {}).length} named positions, ${Object.keys(DB.nextByEpd || {}).length} parents`
         );
         return DB;
       } catch (err) {
-        console.warn("[ChessMate] openings DB load failed:", err);
+        console.warn("[Lasker] openings DB load failed:", err);
         DB = { names: {}, nextByEpd: {} };
         return DB;
       }
@@ -124,7 +124,7 @@
     const named = db.names ? db.names[epd] : null;
     const rawKids = (db.nextByEpd && db.nextByEpd[epd]) || [];
     if (!named && rawKids.length === 0) {
-      console.log(`[ChessMate] opening lookup: no match for ${epd}`);
+      console.log(`[Lasker] opening lookup: no match for ${epd}`);
       return null;
     }
     const sorted = sortChildren(rawKids);
@@ -143,7 +143,7 @@
       }),
     };
     console.log(
-      `[ChessMate] opening lookup: ${named ? `${named.eco} ${named.name}` : "(unnamed position)"}, ${sorted.length} continuations`
+      `[Lasker] opening lookup: ${named ? `${named.eco} ${named.name}` : "(unnamed position)"}, ${sorted.length} continuations`
     );
     return result;
   }
@@ -155,5 +155,5 @@
     return plyCount >= 0 && plyCount <= 40;
   }
 
-  window.ChessMateOpeningBook = { lookup, isEarly };
+  window.LaskerOpeningBook = { lookup, isEarly };
 })();

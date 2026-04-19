@@ -1,6 +1,6 @@
 // Pure helpers for turning numeric Stockfish scores into human-readable text.
 //
-// Exposes window.ChessMateLabels with:
+// Exposes window.LaskerLabels with:
 //   - assessPosition({ scoreCp, scoreMate, turn }) -> { label, severity }
 //   - classifyMove({ prevWhiteCp, prevWhiteMate, currWhiteCp, currWhiteMate,
 //                    mover, inBook }) -> { label, severity, detail }
@@ -113,7 +113,7 @@
     return { label: "Good move", badge: "", severity: "good", detail };
   }
 
-  window.ChessMateLabels = {
+  window.LaskerLabels = {
     assessPosition,
     classifyMove,
     whiteValueOf,

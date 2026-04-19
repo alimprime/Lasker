@@ -1,5 +1,5 @@
 {
-  "name": "chessmate",
+  "name": "lasker",
   "version": "1.0.0",
   "description": "",
   "main": "background.js",
@@ -9,15 +9,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/alimprime/ChessMate.git"
+    "url": "git+https://github.com/alimprime/Lasker.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/alimprime/ChessMate/issues"
+    "url": "https://github.com/alimprime/Lasker/issues"
   },
-  "homepage": "https://github.com/alimprime/ChessMate#readme",
+  "homepage": "https://github.com/alimprime/Lasker#readme",
   "dependencies": {
     "stockfish": "^18.0.7"
   },

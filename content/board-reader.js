@@ -7,7 +7,7 @@
 // Empty squares have no DOM element. We reconstruct the FEN by iterating
 // rank 8 down to 1, file 1 up to 8, checking for a piece at each square.
 //
-// This module exposes window.ChessMateBoardReader with two methods:
+// This module exposes window.LaskerBoardReader with two methods:
 //   - findBoard()  -> the <wc-chess-board> element or null
 //   - readPosition() -> { fen, turn, flipped, hash } or null
 //
@@ -178,7 +178,7 @@
     return rights;
   }
 
-  window.ChessMateBoardReader = {
+  window.LaskerBoardReader = {
     findBoard,
     readPosition,
     toFen,

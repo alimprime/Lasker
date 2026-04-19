@@ -1,8 +1,8 @@
-# ChessMate
+# Lasker
 
 A Chrome extension that adds a live Stockfish analysis overlay to **chess.com**.
 
-When enabled, ChessMate reads the current board from the page, runs Stockfish
+When enabled, Lasker reads the current board from the page, runs Stockfish
 locally in your browser (WebAssembly, no external servers), and shows:
 
 - A numeric evaluation (e.g. `+1.35`, `-0.80`, `M3`) from white's perspective
@@ -68,7 +68,7 @@ chess.com's Fair Play policy and can get your account closed.
 - **Side-to-move** is tracked heuristically (flipped on every detected board
   change). Toggling the extension off and on re-seeds from piece counts.
 - **MutationObserver is unreliable on chess.com** for rapid updates, so
-  ChessMate polls the DOM every 500 ms instead.
+  Lasker polls the DOM every 500 ms instead.
 - Chess.com's DOM can change without notice. All selectors are isolated in
   `content/board-reader.js` for easy maintenance.
 

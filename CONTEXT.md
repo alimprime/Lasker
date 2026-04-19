@@ -1,7 +1,7 @@
-# ChessMate -- Project Context
+# Lasker -- Project Context
 
 This document is the living "state of the project" reference. It captures
-what ChessMate is, how it's built, where every piece lives, how to run it,
+what Lasker is, how it's built, where every piece lives, how to run it,
 and the known limitations and next steps. Keep it up to date when you
 change the architecture.
 
@@ -11,7 +11,7 @@ Current version: **0.4.0**
 
 ## 1. What this project is
 
-**ChessMate** is a Chrome extension (Manifest V3) that adds a live chess
+**Lasker** is a Chrome extension (Manifest V3) that adds a live chess
 position evaluation overlay to **chess.com**. When enabled, it:
 
 - Reads the current board state from the chess.com page DOM
@@ -72,7 +72,7 @@ external APIs, no account, no API keys, no telemetry.
 
 ### Intended use
 
-ChessMate is a **learning and post-game analysis tool**. It is NOT meant
+Lasker is a **learning and post-game analysis tool**. It is NOT meant
 for use during live rated games -- that violates chess.com's Fair Play
 policy and can result in account closure. The README states this
 explicitly.
@@ -82,7 +82,7 @@ explicitly.
 ## 2. Final folder structure
 
 ```
-ChessMate/
+Lasker/
 ├── manifest.json                   MV3 manifest
 ├── background.js                   Service worker; toolbar icon -> toggle
 ├── package.json / package-lock.json  npm (Stockfish + chess.js devDep)
@@ -180,12 +180,12 @@ Manifest V3. Declares:
 - `content_scripts` matched against `https://www.chess.com/*`, loaded at
   `document_idle`. JS files are loaded in this order (later files depend
   on globals set by earlier ones):
-  1. `content/board-reader.js`    -> `window.ChessMateBoardReader`
-  2. `content/analysis-labels.js` -> `window.ChessMateLabels`
-  3. `content/opening-book.js`    -> `window.ChessMateOpeningBook`
-  4. `content/engine-hints.js`    -> `window.ChessMateEngineHints`
-  5. `engine/stockfish-worker.js` -> `window.ChessMateEngine`
-  6. `content/overlay.js`         -> `window.ChessMateOverlay`
+  1. `content/board-reader.js`    -> `window.LaskerBoardReader`
+  2. `content/analysis-labels.js` -> `window.LaskerLabels`
+  3. `content/opening-book.js`    -> `window.LaskerOpeningBook`
+  4. `content/engine-hints.js`    -> `window.LaskerEngineHints`
+  5. `engine/stockfish-worker.js` -> `window.LaskerEngine`
+  6. `content/overlay.js`         -> `window.LaskerOverlay`
   7. `content/content.js`         -> controller
 - `web_accessible_resources`: `engine/stockfish.js`,
   `engine/stockfish.wasm`, and `data/openings.json`.
@@ -200,12 +200,12 @@ Manifest V3. Declares:
 
 Tiny MV3 service worker. Logs installation; listens for toolbar icon
 clicks (`chrome.action.onClicked`) and sends a
-`{ type: "chessmate:toggle" }` message to the active tab's content
+`{ type: "lasker:toggle" }` message to the active tab's content
 script. No network access.
 
 ### `content/board-reader.js`
 
-`window.ChessMateBoardReader` with:
+`window.LaskerBoardReader` with:
 
 - `findBoard()` -- queries `"wc-chess-board, chess-board"`.
 - `readPosition()` -- returns `{ board, grid, boardFen, flipped, hash,
@@ -215,7 +215,7 @@ script. No network access.
 
 ### `content/analysis-labels.js`
 
-`window.ChessMateLabels` with pure functions:
+`window.LaskerLabels` with pure functions:
 
 - `toWhitePerspective(scoreCp, scoreMate, turn)` -- flips signs so the
   caller is always reasoning from white's POV.
@@ -246,7 +246,7 @@ script. No network access.
 
 ### `content/opening-book.js`
 
-`window.ChessMateOpeningBook`. Pure offline lookup against the bundled
+`window.LaskerOpeningBook`. Pure offline lookup against the bundled
 ECO database.
 
 - On first call (or at script load) lazily fetches
@@ -275,7 +275,7 @@ ECO database.
 
 ### `content/engine-hints.js`
 
-`window.ChessMateEngineHints.describeMove({ san, mover, currScoreCp,
+`window.LaskerEngineHints.describeMove({ san, mover, currScoreCp,
 currScoreMate, inBook })` -> string.
 
 Pure helper. Parses the SAN (produced by `content.js` via a small
@@ -333,7 +333,7 @@ by the extension at runtime.
 
 ### `engine/stockfish-worker.js`
 
-`window.ChessMateEngine` class.
+`window.LaskerEngine` class.
 
 Initialization (async):
 
@@ -355,7 +355,7 @@ Runtime:
 
 ### `content/overlay.js`
 
-`window.ChessMateOverlay` singleton.
+`window.LaskerOverlay` singleton.
 
 - `mount({ onToggle, onDepthChange, onThemeChange, onSizeChange })`
   builds the DOM inside a Shadow root and wires up all the controls.
@@ -387,11 +387,11 @@ Runtime:
 
 ### `content/content.js`
 
-The controller, guarded by `window.__chessmateLoaded`.
+The controller, guarded by `window.__laskerLoaded`.
 
 Startup:
 
-1. Load settings from `chrome.storage.local["chessmate.settings"]`.
+1. Load settings from `chrome.storage.local["lasker.settings"]`.
    Defaults: `{ enabled: false, depth: 15, theme: "dark", size: "medium" }`.
 2. Wait for the chess.com board via MutationObserver.
 3. Mount the overlay with handlers for toggle / depth / theme / size.
@@ -439,13 +439,13 @@ so no move-quality label is shown until after the first move.
 
 ## 5. Messaging surface
 
-- **content <- background**: `{ type: "chessmate:toggle" }`.
+- **content <- background**: `{ type: "lasker:toggle" }`.
 - **content -> worker**: UCI commands via `worker.postMessage(cmd)`.
 - **worker -> content**: UCI output via `worker.onmessage`.
 - **content fetch from extension origin**:
     - `chrome-extension://<id>/engine/stockfish.js` (as text, for the Blob worker)
     - `chrome-extension://<id>/data/openings.json`  (the ECO DB)
-- **content <-> storage**: `chrome.storage.local["chessmate.settings"] =
+- **content <-> storage**: `chrome.storage.local["lasker.settings"] =
   { enabled, depth, theme, size }`.
 
 ---
@@ -466,24 +466,24 @@ so no move-quality label is shown until after the first move.
 
 1. Open `chrome://extensions`.
 2. Enable **Developer mode** (top right).
-3. Click **Load unpacked** and select the `ChessMate/` folder.
+3. Click **Load unpacked** and select the `Lasker/` folder.
 4. Visit a chess.com page with a board (`/analysis`, `/play/*`,
    `/puzzles/*`, a specific game URL).
-5. Click the ChessMate toggle in the bottom-right panel.
+5. Click the Lasker toggle in the bottom-right panel.
 
 ### Usage tips
 
 - Click the **gear icon** to change theme or size.
 - Drag the **header** to reposition the panel.
 - Use the **depth slider** to trade speed vs. accuracy (8 fast, 22 deep).
-- Click the ChessMate **toolbar icon** to toggle analysis without
+- Click the Lasker **toolbar icon** to toggle analysis without
   touching the overlay.
 
 ### Reloading after code changes
 
 - Edit files in place (no build step).
 - Go to `chrome://extensions` -> click the circular reload icon on the
-  ChessMate card.
+  Lasker card.
 - Reload the chess.com tab.
 
 ---
@@ -544,7 +544,7 @@ No bundler, no transpiler, no framework. Plain ES2019+ JS.
 
 1. Load unpacked; open a chess.com page with a board.
 2. Overlay appears in the bottom-right.
-3. Click the ChessMate toggle -> "thinking..." appears, then a real
+3. Click the Lasker toggle -> "thinking..." appears, then a real
    score within ~2-3 seconds.
 4. Opening section shows a name + ECO + a few pill moves while in
    known theory.
@@ -575,9 +575,9 @@ No bundler, no transpiler, no framework. Plain ES2019+ JS.
      read `Scotch Game (C44)`, with continuations `exd4` and `Nxd4`
      below.
    - Open DevTools console: you should see a single
-     `[ChessMate] openings DB loaded: N named positions, M parents`
+     `[Lasker] openings DB loaded: N named positions, M parents`
      log on first board change, and one
-     `[ChessMate] opening lookup: ... continuations` per move played.
+     `[Lasker] opening lookup: ... continuations` per move played.
    - Open DevTools -> Network tab: the only `chrome-extension://`
      fetches should be `engine/stockfish.js` (once) and
      `data/openings.json` (once).
@@ -613,7 +613,7 @@ No bundler, no transpiler, no framework. Plain ES2019+ JS.
 
 ## 11. Licensing
 
-- ChessMate source code: MIT (author's choice).
+- Lasker source code: MIT (author's choice).
 - Stockfish (`engine/stockfish.{js,wasm}`): **GPL-3.0**. Any distributed
   build must comply with GPL-3.0.
 
@@ -625,9 +625,9 @@ No bundler, no transpiler, no framework. Plain ES2019+ JS.
 - **Poll interval**: 500 ms (`POLL_MS` in `content.js`).
 - **Default settings**: `{ enabled: false, depth: 15, theme: "dark", size: "medium" }`.
 - **MultiPV**: 3.
-- **Storage key**: `chessmate.settings` in `chrome.storage.local`.
-- **Overlay root id**: `chessmate-overlay-host` (attached to `document.body`).
-- **One-load guard**: `window.__chessmateLoaded` on the page.
+- **Storage key**: `lasker.settings` in `chrome.storage.local`.
+- **Overlay root id**: `lasker-overlay-host` (attached to `document.body`).
+- **One-load guard**: `window.__laskerLoaded` on the page.
 - **Opening-book ply cutoff**: 24 plies (12 full moves) via `isEarly`.
 - **Move-quality thresholds** (cp, from mover's POV):
   `>= 300` blunder, `>= 150` mistake, `>= 70` inaccuracy,

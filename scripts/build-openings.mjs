@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 //
-// Build a local opening database for ChessMate.
+// Build a local opening database for Lasker.
 //
 // Source: https://github.com/lichess-org/chess-openings (CC0).
 //

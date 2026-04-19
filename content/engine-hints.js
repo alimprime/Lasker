@@ -12,7 +12,7 @@
 //
 // The module is a pure-JS helper; no DOM, no chrome APIs. Exposes:
 //
-//   window.ChessMateEngineHints.describeMove({
+//   window.LaskerEngineHints.describeMove({
 //     san, prevScoreCp, prevScoreMate, currScoreCp, currScoreMate, plyCount,
 //   }) -> string
 //
@@ -205,5 +205,5 @@
     return s[0].toUpperCase() + s.slice(1);
   }
 
-  window.ChessMateEngineHints = { describeMove };
+  window.LaskerEngineHints = { describeMove };
 })();

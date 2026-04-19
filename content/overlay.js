@@ -1,9 +1,9 @@
-// ChessMate on-page overlay.
+// Lasker on-page overlay.
 //
 // Floating panel attached to document.body with its own Shadow DOM so
 // chess.com's CSS cannot leak in or out.
 //
-// Exposes window.ChessMateOverlay with:
+// Exposes window.LaskerOverlay with:
 //   mount(handlers)
 //   setEnabled(bool)
 //   setStatus(text)
@@ -535,7 +535,7 @@
       this.handlers = handlers;
 
       this.host = document.createElement("div");
-      this.host.id = "chessmate-overlay-host";
+      this.host.id = "lasker-overlay-host";
       this.host.style.all = "initial";
       this.shadow = this.host.attachShadow({ mode: "open" });
 
@@ -547,7 +547,7 @@
       root.className = "root";
       root.innerHTML = `
         <div class="header" data-drag>
-          <div class="title"><span class="dot"></span>ChessMate</div>
+          <div class="title"><span class="dot"></span>Lasker</div>
           <button class="icon-btn settings-btn" title="Settings">&#9881;</button>
           <button class="toggle" title="Toggle analysis"></button>
         </div>
@@ -1018,5 +1018,5 @@
     }
   }
 
-  window.ChessMateOverlay = new Overlay();
+  window.LaskerOverlay = new Overlay();
 })();

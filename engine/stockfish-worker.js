@@ -4,8 +4,8 @@
 // The Stockfish Emscripten loader reads the wasm path from `self.location.hash`,
 // so we pass the wasm URL as a hash fragment to keep paths unambiguous.
 //
-// Exposes window.ChessMateEngine as an instance controller:
-//   const engine = new ChessMateEngine({ onLine, onInfo, onBestMove, onError });
+// Exposes window.LaskerEngine as an instance controller:
+//   const engine = new LaskerEngine({ onLine, onInfo, onBestMove, onError });
 //   await engine.init(); // sends uci, waits for "uciok"; sets MultiPV
 //   engine.analyze(fen, depth); // stops any prior search, starts fresh
 //   engine.stop();
@@ -58,7 +58,7 @@
     return info;
   }
 
-  class ChessMateEngine {
+  class LaskerEngine {
     constructor(opts = {}) {
       this.onLine = opts.onLine || null;
       this.onInfo = opts.onInfo || null;
@@ -205,6 +205,6 @@
     }
   }
 
-  window.ChessMateEngine = ChessMateEngine;
-  window.ChessMateParseInfo = parseInfoLine;
+  window.LaskerEngine = LaskerEngine;
+  window.LaskerParseInfo = parseInfoLine;
 })();
