@@ -5,7 +5,7 @@ what LASKER is, how it's built, where every piece lives, how to run it,
 and the known limitations and next steps. Keep it up to date when you
 change the architecture.
 
-Current version: **0.11.0**
+Current version: **0.11.4**
 
 ---
 
@@ -99,7 +99,11 @@ through cached positions.
 9. **Top engine line** — the PV stored at this ply.
 10. **Mistake list** — clickable rows for every inaccuracy / mistake
     / blunder. Clicking a row simulates chess.com's nav buttons to
-    jump the board to that exact ply.
+    jump the board to that exact ply. When focused on a mistake, a
+    **Lesson** card can show three blocks (**What went wrong**, **Stronger try**,
+    **Practice habit**) built from cached classification + coaching copy
+    (not the raw engine delta string — that stays on the last-move card's
+    detail popover).
 11. **Session summary** — per-severity tally + accuracy %.
 
 **`stale`** — the user navigated the board outside the analyzed
@@ -293,9 +297,13 @@ PlyEntry = {
   bestUci, bestSan,        // engine's best reply FROM this position
   pv,                      // PV (first ~8 UCIs)
   classification,          // classifyMove() output for the move that
-                           //   led here (null for ply 0); includes
-                           //   `bestSan` + `missedText` when it differs
-                           //   from the engine's #1 at the previous ply
+                           //   led here (null for ply 0). Includes
+                           //   `detail` (technical delta string for power
+                           //   users), `detailPlain` (coaching paragraph),
+                           //   `moverDeltaCp` (real cp swing when neither
+                           //   ply is mate-scored), optional `bestSan` +
+                           //   `missedText` when the move wasn't the engine's
+                           //   #1 at the previous ply (`analyze-session.js`)
   assessment,              // assessPosition() output AT this position
   opening, inBook,         // { name, eco } | null, and whether it's in book
 }
@@ -333,6 +341,26 @@ own toolbar buttons (`aria-label` matching, with keyboard-event
 fallback) — first `Go to start`, then `Move forward` N times with a
 small await between clicks. The poll loop picks up the new board
 state naturally and finds the cache entry by hash.
+
+**Human-readable mistake lessons (0.11.4+).** The expandable **Lesson**
+panel under the mistake list is filled by `content.js#buildMistakeLesson`.
+It prefers `classification.detailPlain` (see `analysis-labels.js`) — a
+short before/after story in words (**White** / **Black**, not "your
+side") plus an optional pawn swing explained for beginners. The legacy
+`detail` string (`Eval (from mover): … Δ …`) is **not** duplicated here;
+it remains on the **Last move** card's `?` detail bubble.
+
+When the batch attached `bestSan` + `missedText` ("missed +1.20",
+"forced M3"), the lesson adds a **vs best** sentence. If that magnitude
+matches a pawn figure already stated in `detailPlain`, the extra sentence
+is **deduped** to only name the preferred move — no repeated "10.4 pawns"
+style duplication.
+
+**Stronger try** uses `LaskerEngineHints.describeMove` with eval omitted
+(so we never invent a fake post-move score); leading `Book move:` /
+`Play ` prefixes are stripped for readability. **Practice habit** comes
+from `severityTheory(severity, { moverDeltaCp })` — optional centipawn
+swing buckets tune how urgent the generic advice reads for big blunders.
 
 **Files that changed.**
 
@@ -701,15 +729,15 @@ Lasker/
 ├── content/
 │   ├── fair-play.js                page-context classifier (safe / unsafe gate)
 │   ├── board-reader.js             DOM -> FEN extraction (also exposes grid)
-│   ├── analysis-labels.js          pure helpers: assessPosition + classifyMove
+│   ├── analysis-labels.js          assessPosition, classifyMove (+ detailPlain / moverDeltaCp), plainEvalSummary
 │   ├── opening-book.js             offline ECO DB client + curated catalog + san->uci + expandLineWithFens (0.11+)
-│   ├── engine-hints.js             describeMove(): UCI/SAN -> human sentence
+│   ├── engine-hints.js             describeMove, thematicLine, severityTheory(opts swing)
 │   ├── board-arrows.js             SVG overlay drawn over <wc-chess-board> (0.8+)
 │   ├── move-list-reader.js         (0.11+) chess.com move-list DOM scraper + nav-button driver
 │   ├── analyze-session.js          (0.11+) batch Stockfish runner; owns one LaskerEngine per batch
 │   ├── overlay.js                  Shadow-DOM panel (theme + size + timeline + library + review state)
 │   ├── overlay.css                 stub (all styles live in Shadow DOM)
-│   └── content.js                  controller: poll loop + batch orchestration + study mode
+│   └── content.js                  controller: poll loop + batch orchestration + mistake lessons + study mode
 ├── engine/
 │   ├── stockfish.js                Stockfish 18 Lite single-thread loader (~20KB)
 │   ├── stockfish.wasm              Stockfish WASM binary (~7MB)
@@ -894,10 +922,18 @@ it being present.
     - `>= 500` -> "`{side}` is completely winning"
     - mate -> "`{side}` mates in `N`"
 - `classifyMove({ prevWhiteCp, prevWhiteMate, currWhiteCp,
-  currWhiteMate, mover, inBook })` -> `{ label, badge, severity, detail }`.
+  currWhiteMate, mover, inBook })` ->
+  `{ label, badge, severity, detail, detailPlain, moverDeltaCp }`.
   Computes `delta` in centipawns from the mover's POV
   (positive = improved for the mover). `detail` is a ready-to-display
-  string like `Eval (from mover): +0.20 -> -1.50 (Δ -1.70)`.
+  technical string like `Eval (from mover): +0.20 -> -1.50 (Δ -1.70)`
+  (still used by the last-move detail popover). `detailPlain` is a
+  separate coaching paragraph (pure cp paths + mate-aware wording).
+  `moverDeltaCp` is the true centipawn mover swing when both positions
+  are scored in cp (mate lines leave it `null`).
+- `plainEvalSummary({ prevWhiteCp, prevWhiteMate, currWhiteCp,
+  currWhiteMate, mover })` -> string — used by `classifyMove` and
+  callable directly when recomputing copy from cached ply fields.
   Thresholds (checked top to bottom):
     - `delta <= -300` -> **Blunder** (`??`, severity `blunder`)
     - `delta <= -150` -> **Mistake** (`?`, severity `mistake`)
@@ -941,6 +977,14 @@ ECO database.
 
 `window.LaskerEngineHints.describeMove({ san, mover, currScoreCp,
 currScoreMate, inBook })` -> string.
+
+Also exports **`thematicLine(san)`** — short action + themes without an
+eval sentence (used where a full `describeMove` line would be redundant).
+
+**`severityTheory(severity, opts?)`** — one short habit paragraph for
+the mistake-lesson "Practice habit" block. When `opts.moverDeltaCp` is a
+large negative swing, blunder copy emphasizes one-move tactics; otherwise
+wording stays generic.
 
 Pure helper. Parses the SAN (produced by `content.js` via a small
 UCI->pseudo-SAN converter that uses the live piece grid) and emits a
@@ -1302,7 +1346,9 @@ with whatever depth was reached.
   once, rewinds the board, then serves instant cached feedback as
   you step through with chess.com's forward/back arrows.
 - The **mistake list** in the ready state is clickable; each row
-  jumps the chess.com board to that exact ply.
+  jumps the chess.com board to that exact ply. The **Lesson** copy for
+  each graded slip is coaching-first (plain-language eval story); raw
+  engine notation for the delta stays under **Last move** → "tell me more".
 - **Batch depth** (in Settings) trades speed vs. accuracy: **Fast
   14** (~5-10s for a typical game), **Normal 18** (~20s, default),
   **Deep 22** (~60s+). The change applies to the next batch run.
