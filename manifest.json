@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "ChessMate",
+  "version": "0.2.1",
+  "description": "Live Stockfish analysis overlay for chess.com with human-readable labels, opening theory, and theme/size options. For learning and post-game analysis.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "ChessMate",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://www.chess.com/*",
+    "https://explorer.lichess.ovh/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.chess.com/*"],
+      "js": [
+        "content/board-reader.js",
+        "content/analysis-labels.js",
+        "content/opening-book.js",
+        "engine/stockfish-worker.js",
+        "content/overlay.js",
+        "content/content.js"
+      ],
+      "css": ["content/overlay.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "engine/stockfish.js",
+        "engine/stockfish.wasm"
+      ],
+      "matches": ["https://www.chess.com/*"]
+    }
+  ]
+}
