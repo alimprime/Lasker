@@ -8,7 +8,8 @@
 //   setEnabled(bool)
 //   setStatus(text)
 //   setAssessment({label, severity})
-//   setLastMove({label, badge, severity, detail})
+//   setLastMove({headline, label, badge, severity, detail, bestSan, bestLineNote, missedText})
+//   setMistakeLesson({why, better, next, tour?: {index, total}} | null)
 //   setOpening({name, eco, moves, fen})
 //   setEngineHint({text, source})
 //   setPrinciples({king, development, centre}) -- "safe"|"home"|"exposed", "good"|"partial"|"none", "good"|"weak"
@@ -53,6 +54,16 @@
   const SIZE_FS = { small: 15, medium: 17, large: 19 };
   const MIN_WIDTH = 420;
   const MAX_WIDTH_CAP = 960;
+
+  function escapeHtml(s) {
+    if (s == null) return "";
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
 
   // 0.8.0: font + icon sizing refactor.
   //
@@ -462,8 +473,20 @@
       align-items: center;
       gap: 8px;
     }
-    .last-move .prefix { color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; font-size: calc(var(--fs) - 3px); }
-    .last-move .quality { font-weight: 800; }
+    .last-move .lm-headline {
+      flex: 1 1 auto;
+      font-weight: 700;
+      line-height: 1.35;
+      font-size: calc(var(--fs) - 1px);
+    }
+    .last-move .lm-best-note {
+      font-size: calc(var(--fs-caption) - 1px);
+      color: var(--muted);
+      line-height: 1.35;
+      padding-left: 2px;
+      display: none;
+    }
+    .last-move .lm-best-note.visible { display: block; }
     .last-move .badge {
       font-weight: 800;
       font-family: "SF Mono", Menlo, Consolas, monospace;
@@ -691,6 +714,119 @@
       flex-direction: column;
       gap: 4px;
       background: var(--bg-3);
+    }
+    .engine-hint .eh-sub {
+      font-size: calc(var(--fs-caption) - 1px);
+      color: var(--muted);
+      line-height: 1.4;
+      margin: 0 0 8px 0;
+      max-width: 34em;
+    }
+    .mistake-list .ml-intro {
+      font-size: calc(var(--fs-caption) - 1px);
+      color: var(--muted);
+      line-height: 1.4;
+      margin: -4px 0 6px 0;
+      max-width: 36em;
+    }
+    .mistake-list .ml-tour {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-3);
+      font-size: calc(var(--fs-caption));
+      font-weight: 600;
+    }
+    .mistake-list .ml-tour.hidden { display: none; }
+    .mistake-list .ml-tour-text {
+      color: var(--fg);
+      font-variant-numeric: tabular-nums;
+    }
+    .mistake-list .ml-tour-btns {
+      display: flex;
+      gap: 6px;
+    }
+    .mistake-list .ml-tour-prev,
+    .mistake-list .ml-tour-next {
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-2);
+      color: var(--fg);
+      font-size: calc(var(--fs-caption) - 1px);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .mistake-list .ml-tour-prev:hover,
+    .mistake-list .ml-tour-next:hover {
+      background: var(--hover);
+      border-color: var(--accent);
+    }
+    .mistake-list .ml-tour-prev:disabled,
+    .mistake-list .ml-tour-next:disabled {
+      opacity: 0.45;
+      cursor: default;
+      pointer-events: none;
+    }
+    .mistake-list .ml-subcap {
+      font-size: calc(var(--fs-caption) - 2px);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 10px 0 4px 0;
+    }
+    .mistake-list .ml-lesson {
+      margin-top: 8px;
+      padding: 10px 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-2);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .mistake-list .ml-lesson.hidden { display: none; }
+    .mistake-list .ml-lesson-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .mistake-list .ml-lesson-title {
+      font-weight: 800;
+      font-size: calc(var(--fs) - 2px);
+    }
+    .mistake-list .ml-lesson-close {
+      border: 1px solid var(--border);
+      background: var(--bg-3);
+      color: var(--fg);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .mistake-list .ml-lesson-close:hover { border-color: var(--accent); }
+    .mistake-list .ml-lesson-block .ml-lb {
+      display: block;
+      font-size: calc(var(--fs-caption) - 1px);
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+    }
+    .mistake-list .ml-lesson-block > div:last-child {
+      font-size: calc(var(--fs-body) - 1px);
+      line-height: 1.45;
+      color: var(--fg);
     }
     .engine-hint .eh-caption {
       font-size: calc(var(--fs) - 3px);
@@ -1387,6 +1523,375 @@
       display: none !important;
     }
 
+    /* ====== 0.11.0: Post-game batch Analyze state gating ================
+       The Analyze surface is a state machine now:
+         data-review-state="idle"     -> idle card (Analyze this game button)
+         data-review-state="running"  -> progress card
+         data-review-state="ready"    -> full review (cache-fed)
+         data-review-state="stale"    -> banner + Re-analyze button
+       Only the "ready" state shows the existing eval / last-move /
+       timeline / lines / summary / mistake-list. Non-ready states hide
+       all of them and show a single focused card. */
+
+    .review-card {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      margin: 10px 12px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+    }
+    /* Fail-open default: on the Analyze surface the IDLE card is visible
+       unless another review-state is explicitly active. This keeps the
+       "Analyze this game" button reachable even if the controller hasn't
+       yet painted a state (e.g. fair-play context is still classifying,
+       or this is first boot before the first poll tick). */
+    .root.surface-analyze .review-idle    { display: flex; }
+    .root.surface-analyze[data-review-state="running"] .review-idle { display: none; }
+    .root.surface-analyze[data-review-state="ready"]   .review-idle { display: none; }
+    .root.surface-analyze[data-review-state="stale"]   .review-idle { display: none; }
+    .root.surface-analyze[data-review-state="running"] .review-running { display: flex; }
+    .root.surface-analyze[data-review-state="stale"]   .review-stale   { display: flex; }
+    /* Learn surface always hides review-state cards -- they're analyze-only. */
+    .root.surface-learn .review-card { display: none !important; }
+    .root.surface-learn .review-nav { display: none !important; }
+
+    /* In every non-ready review state, hide the cache-driven panels so
+       we don't leak the old live-advisor UI through. The idle / running
+       / stale cards own the surface in those states. The default
+       (attribute missing) is treated as idle. */
+    .root.surface-analyze:not([data-review-state="ready"]) .review-nav,
+    .root.surface-analyze:not([data-review-state="ready"]) .timeline,
+    .root.surface-analyze:not([data-review-state="ready"]) .body,
+    .root.surface-analyze:not([data-review-state="ready"]) .assessment,
+    .root.surface-analyze:not([data-review-state="ready"]) .last-move,
+    .root.surface-analyze:not([data-review-state="ready"]) .chips,
+    .root.surface-analyze:not([data-review-state="ready"]) .op-pill,
+    .root.surface-analyze:not([data-review-state="ready"]) .engine-hint,
+    .root.surface-analyze:not([data-review-state="ready"]) .principle-warning,
+    .root.surface-analyze:not([data-review-state="ready"]) .lines,
+    .root.surface-analyze:not([data-review-state="ready"]) .summary,
+    .root.surface-analyze:not([data-review-state="ready"]) .mistake-list,
+    .root.surface-analyze:not([data-review-state="ready"]) .footer {
+      display: none !important;
+    }
+
+    /* Review navigation (batch ready): drives chess.com prev/next via content.js */
+    .review-nav {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      margin: 6px 12px 4px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+    }
+    .root.surface-analyze[data-review-state="ready"] .review-nav {
+      display: flex !important;
+    }
+    .review-nav .rn-hint {
+      font-size: var(--fs-caption);
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    .review-nav .rn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      justify-content: flex-start;
+    }
+    .review-nav .rn-btn {
+      flex: 0 0 auto;
+      min-width: 40px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-3);
+      color: var(--fg);
+      font-weight: 700;
+      font-size: calc(var(--fs-caption) + 1px);
+      cursor: pointer;
+    }
+    .review-nav .rn-btn:hover {
+      background: var(--hover);
+    }
+    .review-nav .rn-scrub {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .review-nav .rn-slider {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    .review-nav .rn-pty {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: var(--fs-caption);
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .review-nav .rn-sync {
+      display: none;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 1px;
+    }
+
+    /* Idle card. */
+    .review-idle .ri-title {
+      font-size: calc(var(--fs-display) + 2px);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .review-idle .ri-summary {
+      font-size: var(--fs-body);
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .review-idle .ri-summary .ri-tag {
+      display: inline-block;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: calc(var(--fs-caption) - 1px);
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--bg-3);
+      color: var(--fg);
+      margin-right: 6px;
+    }
+    .review-idle .ri-depth {
+      font-size: var(--fs-caption);
+      color: var(--muted);
+    }
+    .review-idle .ri-depth-num {
+      color: var(--fg);
+      font-weight: 600;
+    }
+    .review-idle .ri-btn {
+      margin-top: 2px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: var(--fs-body);
+      cursor: pointer;
+      transition: filter 0.12s ease;
+    }
+    .review-idle .ri-btn:hover { filter: brightness(1.08); }
+    .review-idle .ri-btn:disabled {
+      background: var(--bg-3);
+      border-color: var(--border);
+      color: var(--muted);
+      cursor: not-allowed;
+      filter: none;
+    }
+    .review-idle .ri-hint {
+      font-size: var(--fs-caption);
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .review-idle .ri-error {
+      font-size: var(--fs-caption);
+      color: #e27272;
+      display: none;
+    }
+    .review-idle.has-error .ri-error { display: block; }
+
+    /* Running card. */
+    .review-running .rr-title {
+      font-size: var(--fs-display);
+      font-weight: 700;
+    }
+    .review-running .rr-progress-text {
+      font-variant-numeric: tabular-nums;
+      font-size: calc(var(--fs-body) - 1px);
+      color: var(--muted);
+    }
+    .review-running .rr-bar {
+      height: 8px;
+      background: var(--bg-3);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .review-running .rr-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #fff 30%));
+      transition: width 0.25s ease;
+    }
+    .review-running .rr-eta {
+      font-size: var(--fs-caption);
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .review-running .rr-current {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: calc(var(--fs-caption) + 1px);
+      color: var(--fg);
+      min-height: 1em;
+    }
+    .review-running .rr-cancel {
+      align-self: flex-start;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      font-size: var(--fs-caption);
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .review-running .rr-cancel:hover {
+      color: var(--fg);
+      border-color: #e27272;
+    }
+
+    /* Stale card. */
+    .review-stale .rs-title {
+      font-size: var(--fs-display);
+      font-weight: 700;
+      color: #e2a063;
+    }
+    .review-stale .rs-body {
+      font-size: var(--fs-body);
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .review-stale .rs-reanalyze {
+      align-self: flex-start;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      border: 1px solid var(--accent);
+      font-weight: 700;
+      font-size: var(--fs-caption);
+      cursor: pointer;
+    }
+    .review-stale .rs-reanalyze:hover { filter: brightness(1.08); }
+
+    /* Mistake list (ready state). */
+    .mistake-list {
+      margin: 6px 12px 0;
+      padding: 10px 12px 8px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .mistake-list.hidden { display: none; }
+    .mistake-list .ml-title {
+      font-weight: 700;
+      font-size: calc(var(--fs) - 1px);
+      letter-spacing: 0.02em;
+    }
+    .mistake-list .ml-empty {
+      font-size: var(--fs-caption);
+      color: var(--muted);
+    }
+    .mistake-list .ml-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      font-size: calc(var(--fs-body) - 1px);
+    }
+    .mistake-list .ml-row:hover {
+      border-color: var(--accent);
+      background: var(--hover);
+    }
+    .mistake-list .ml-main {
+      flex: 1 1 140px;
+      cursor: pointer;
+      text-align: left;
+      border: none;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: baseline;
+    }
+    .mistake-list .ml-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+    }
+    .mistake-list .ml-jump {
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-3);
+      color: var(--fg);
+      font-size: calc(var(--fs-caption) - 1px);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .mistake-list .ml-jump:hover {
+      background: var(--hover);
+    }
+    .mistake-list .ml-move {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-weight: 600;
+      min-width: 64px;
+    }
+    .mistake-list .ml-label {
+      font-weight: 600;
+      flex: 0 0 auto;
+    }
+    .mistake-list .ml-badge {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-weight: 700;
+      color: var(--muted);
+    }
+    .mistake-list .ml-miss {
+      margin-left: auto;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .mistake-list .sev-inaccuracy { border-left: 3px solid #e6c06d; padding-left: 6px; }
+    .mistake-list .sev-mistake    { border-left: 3px solid #e28f6a; padding-left: 6px; }
+    .mistake-list .sev-blunder    { border-left: 3px solid #e27272; padding-left: 6px; }
+    .mistake-list .ml-body {
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    /* Batch-depth preset buttons in Settings (0.11.0). */
+    .batch-depth-seg button {
+      padding: 6px 10px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-right-width: 0;
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .batch-depth-seg button:last-child { border-right-width: 1px; }
+    .batch-depth-seg button:first-child { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+    .batch-depth-seg button:last-child  { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+    .batch-depth-seg button.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+
     /* ====== Opening Library (inline picker + directive Study card)
        ========================================================= */
 
@@ -1826,9 +2331,49 @@
           <button class="toggle" title="Toggle analysis (L)"></button>
         </div>
         <div class="body-scroll">
+        <!-- 0.11.0: post-game batch Analyze state machine. These cards
+             are mutually exclusive with the cache-driven panels below
+             (see data-review-state gating in CSS). -->
+        <div class="review-card review-idle">
+          <div class="ri-title">Analyze this game</div>
+          <div class="ri-summary">Finish a game on chess.com, then click below. LASKER will run Stockfish against every move once, cache the review, and rewind the board so you can step through with instant feedback.</div>
+          <div class="ri-depth">Batch depth: <span class="ri-depth-num">18</span></div>
+          <button class="ri-btn" type="button">Analyze this game</button>
+          <div class="ri-hint">Nothing is sent to a server. The engine runs locally in your browser and tears down as soon as the batch finishes.</div>
+          <div class="ri-error"></div>
+        </div>
+        <div class="review-card review-running">
+          <div class="rr-title">Analyzing your game...</div>
+          <div class="rr-progress-text">0 / 0 plies</div>
+          <div class="rr-bar"><div class="rr-bar-fill"></div></div>
+          <div class="rr-eta">estimating...</div>
+          <div class="rr-current"></div>
+          <button class="rr-cancel" type="button">Cancel</button>
+        </div>
+        <div class="review-card review-stale">
+          <div class="rs-title">Outside cached analysis</div>
+          <div class="rs-body">This board doesn&rsquo;t match the main line we analyzed (explorer line, transposition, or the page was still animating). Use LASKER&rsquo;s <b>Prev / Next</b>, chess.com&rsquo;s move list, or <b>Re-analyze</b> to resync.</div>
+          <button class="rs-reanalyze" type="button">Re-analyze from start</button>
+        </div>
         <div class="timeline hidden">
           <span class="tl-caption">Moves</span>
           <div class="tl-track"></div>
+        </div>
+        <div class="review-nav">
+          <div class="rn-hint">Interactive review — buttons forward clicks to chess.com (same as its move arrows / keyboard).</div>
+          <div class="rn-row">
+            <button type="button" class="rn-btn" data-rn="start" title="Start position">|◀</button>
+            <button type="button" class="rn-btn" data-rn="prev" title="Previous move">◀</button>
+            <button type="button" class="rn-btn" data-rn="next" title="Next move">▶</button>
+            <button type="button" class="rn-btn" data-rn="end" title="Final position">▶|</button>
+          </div>
+          <div class="rn-scrub">
+            <input type="range" class="rn-slider" min="0" max="0" value="0" step="1" aria-label="Go to ply" />
+            <div class="rn-pty">
+              <span class="rn-ply-text">Ply 0 / 0</span>
+              <span class="rn-sync" aria-hidden="true">&middot;&middot;&middot;</span>
+            </div>
+          </div>
         </div>
         <div class="body">
           <div class="bar-wrap">
@@ -1847,16 +2392,16 @@
         </div>
         <div class="last-move hidden">
           <div class="lm-head">
-            <span class="prefix">Last move</span>
-            <span class="quality sev-neutral">Solid</span>
+            <span class="lm-headline sev-neutral">—</span>
             <span class="badge"></span>
-            <button class="clarify" title="Why this label?">?</button>
+            <button class="clarify" title="Show numeric eval change (from batch)">?</button>
           </div>
           <div class="lm-best hidden">
-            <span class="lm-best-label">Best was</span>
+            <span class="lm-best-label">Stronger try from the same diagram</span>
             <span class="lm-best-san"></span>
             <span class="lm-best-miss"></span>
           </div>
+          <div class="lm-best-note"></div>
           <div class="detail"></div>
         </div>
         <div class="chips hidden">
@@ -1897,7 +2442,8 @@
           <div class="lib-body"></div>
         </div>
         <div class="engine-hint bubble hidden">
-          <div class="eh-caption">Insight &middot; What to play</div>
+          <div class="eh-caption">Suggested move (engine)</div>
+          <div class="eh-sub">For whoever is to move on the board now (not necessarily your mistake — see the move card above / lesson below).</div>
           <div class="eh-text"></div>
           <div class="coach-eval">
             <span class="ce-label">Eval</span>
@@ -1917,6 +2463,28 @@
           <div class="line empty" data-line="2">line 2: --</div>
           <div class="line empty" data-line="3">line 3: --</div>
         </div>
+        <div class="mistake-list hidden">
+          <div class="ml-title">Improve your play</div>
+          <div class="ml-intro">Coach notes and “Play instead” appear here first. Step through mistakes with Next / Previous, or open any row below.</div>
+          <div class="ml-tour hidden" aria-label="Mistake tour">
+            <span class="ml-tour-text"></span>
+            <div class="ml-tour-btns">
+              <button type="button" class="ml-tour-prev">Previous</button>
+              <button type="button" class="ml-tour-next">Next</button>
+            </div>
+          </div>
+          <div class="ml-lesson hidden" aria-live="polite">
+            <div class="ml-lesson-top">
+              <div class="ml-lesson-title">Lesson</div>
+              <button type="button" class="ml-lesson-close" title="Dismiss">&times;</button>
+            </div>
+            <div class="ml-lesson-block"><span class="ml-lb">What went wrong</span><div class="ml-lesson-why"></div></div>
+            <div class="ml-lesson-block"><span class="ml-lb">Stronger try</span><div class="ml-lesson-better"></div></div>
+            <div class="ml-lesson-block"><span class="ml-lb">Practice habit</span><div class="ml-lesson-next"></div></div>
+          </div>
+          <div class="ml-subcap">All flagged moves</div>
+          <div class="ml-body"></div>
+        </div>
         <div class="summary hidden">
           <div class="sum-head">
             <span class="sum-title">Session summary</span>
@@ -1928,12 +2496,28 @@
           </div>
           <div class="sum-chips"></div>
         </div>
-        <div class="footer">
-          <span>depth</span>
-          <input type="range" min="8" max="22" value="15" />
-          <span class="depth-label">15</span>
+        <div class="footer" hidden>
+          <!-- 0.11.0: depth moved into Settings (Batch depth). Footer kept
+               as a hidden element so legacy references don't break. -->
+          <input type="range" min="8" max="24" value="18" hidden />
+          <span class="depth-label" hidden>18</span>
         </div>
         <div class="settings">
+          <div class="row">
+            <span>Batch depth</span>
+            <div class="depth-control">
+              <div class="seg batch-depth-seg">
+                <button data-depth="14" title="Fast (14 plies)">Fast</button>
+                <button data-depth="18" title="Normal (18 plies)">Normal</button>
+                <button data-depth="22" title="Deep (22 plies)">Deep</button>
+              </div>
+              <div class="depth-slider-row">
+                <input type="range" min="8" max="24" value="18" class="depth-slider-settings" />
+                <span class="depth-label-settings">18</span>
+              </div>
+              <div class="depth-hint">Applies on the next batch run. Deeper is slower.</div>
+            </div>
+          </div>
           <div class="row">
             <span>Mode</span>
             <div class="seg mode-seg">
@@ -2014,13 +2598,14 @@
       this.elements.assessment = q(".assessment");
       this.elements.assessText = q(".assess-text");
       this.elements.lastMove = q(".last-move");
-      this.elements.lastMoveText = q(".last-move .quality");
+      this.elements.lastMoveHeadline = q(".last-move .lm-headline");
       this.elements.lastMoveBadge = q(".last-move .badge");
       this.elements.lastMoveDetail = q(".last-move .detail");
       this.elements.clarify = q(".last-move .clarify");
       this.elements.lmBest = q(".last-move .lm-best");
       this.elements.lmBestSan = q(".last-move .lm-best-san");
       this.elements.lmBestMiss = q(".last-move .lm-best-miss");
+      this.elements.lmBestNote = q(".last-move .lm-best-note");
       // 0.9.0: the big Opening card is gone. We keep a tiny inline pill
       // in Analyze so you still see "Italian Game · C50" without another
       // full card fighting for vertical space.
@@ -2052,8 +2637,14 @@
         q('[data-line="2"]'),
         q('[data-line="3"]'),
       ];
-      this.elements.depthSlider = q('input[type="range"]');
-      this.elements.depthLabel = q(".depth-label");
+      // 0.11.0: "Batch depth" lives in Settings now. The old footer
+      // slider is kept in the tree but hidden; we bind to the Settings
+      // slider as the canonical depthSlider/depthLabel so setDepth(n)
+      // continues to work unchanged.
+      this.elements.depthSlider = q(".depth-slider-settings");
+      this.elements.depthLabel = q(".depth-label-settings");
+      this.elements.batchDepthSeg = q(".batch-depth-seg");
+      this.elements.riDepthNum = q(".review-idle .ri-depth-num");
       this.elements.header = q(".header");
       this.elements.settingsBtn = q(".settings-btn");
       this.elements.resetBtn = q(".reset-btn");
@@ -2085,6 +2676,39 @@
       this.elements.studyWhy = q(".study .st-why");
       this.elements.studyExit = q(".study .st-exit");
       this.elements.arrowsSeg = q(".arrows-seg");
+
+      // 0.11.0: post-game batch Analyze state cards + mistake list.
+      this.elements.reviewIdle = q(".review-idle");
+      this.elements.reviewIdleSummary = q(".review-idle .ri-summary");
+      this.elements.reviewIdleDepth = q(".review-idle .ri-depth-num");
+      this.elements.reviewIdleError = q(".review-idle .ri-error");
+      this.elements.reviewIdleBtn = q(".review-idle .ri-btn");
+      this.elements.reviewRunning = q(".review-running");
+      this.elements.reviewRunningText = q(".review-running .rr-progress-text");
+      this.elements.reviewRunningFill = q(".review-running .rr-bar-fill");
+      this.elements.reviewRunningEta = q(".review-running .rr-eta");
+      this.elements.reviewRunningCurrent = q(".review-running .rr-current");
+      this.elements.reviewRunningCancel = q(".review-running .rr-cancel");
+      this.elements.reviewStale = q(".review-stale");
+      this.elements.reviewStaleBtn = q(".review-stale .rs-reanalyze");
+      this.elements.mistakeList = q(".mistake-list");
+      this.elements.mistakeListBody = q(".mistake-list .ml-body");
+      this.elements.mistakeTour = q(".mistake-list .ml-tour");
+      this.elements.mistakeTourText = q(".mistake-list .ml-tour-text");
+      this.elements.mistakeTourPrev = q(".mistake-list .ml-tour-prev");
+      this.elements.mistakeTourNext = q(".mistake-list .ml-tour-next");
+      this.elements.mistakeLesson = q(".mistake-list .ml-lesson");
+      this.elements.mistakeLessonWhy = q(".mistake-list .ml-lesson-why");
+      this.elements.mistakeLessonBetter = q(".mistake-list .ml-lesson-better");
+      this.elements.mistakeLessonNext = q(".mistake-list .ml-lesson-next");
+      this.elements.mistakeLessonClose = q(".mistake-list .ml-lesson-close");
+      this.elements.reviewNav = q(".review-nav");
+      this.elements.reviewNavSlider = q(".rn-slider");
+      this.elements.reviewNavPlyText = q(".rn-ply-text");
+      this.elements.reviewNavSync = q(".rn-sync");
+
+      // Initial review state: idle (no cache yet).
+      this.root.setAttribute("data-review-state", "idle");
 
       this._applyThemeVars();
       this._applySizeVars();
@@ -2147,6 +2771,122 @@
         this.setArrows(on);
         if (this.handlers.onArrowsChange) this.handlers.onArrowsChange(on);
       });
+      // 0.11.0: Batch depth preset buttons (Fast 14 / Normal 18 / Deep 22).
+      if (this.elements.batchDepthSeg) {
+        this.elements.batchDepthSeg.addEventListener("click", (e) => {
+          const btn = e.target.closest("button[data-depth]");
+          if (!btn) return;
+          const v = parseInt(btn.dataset.depth, 10);
+          if (!Number.isFinite(v)) return;
+          this.setDepth(v);
+          if (this.handlers.onDepthChange) this.handlers.onDepthChange(v);
+        });
+      }
+      // 0.11.0: Review state buttons.
+      if (this.elements.reviewIdleBtn) {
+        this.elements.reviewIdleBtn.addEventListener("click", () => {
+          if (this.elements.reviewIdleBtn.disabled) return;
+          if (this.handlers.onStartBatch) {
+            try { this.handlers.onStartBatch(); } catch (_err) {}
+          }
+        });
+      }
+      if (this.elements.reviewRunningCancel) {
+        this.elements.reviewRunningCancel.addEventListener("click", () => {
+          if (this.handlers.onCancelBatch) {
+            try { this.handlers.onCancelBatch(); } catch (_err) {}
+          }
+        });
+      }
+      if (this.elements.reviewStaleBtn) {
+        this.elements.reviewStaleBtn.addEventListener("click", () => {
+          if (this.handlers.onReanalyze) {
+            try { this.handlers.onReanalyze(); } catch (_err) {}
+          }
+        });
+      }
+      if (this.elements.mistakeListBody) {
+        this.elements.mistakeListBody.addEventListener("click", (e) => {
+          const jmp = e.target.closest(".ml-jump");
+          if (jmp && jmp.dataset.ply != null) {
+            e.preventDefault();
+            const targetPly = parseInt(jmp.dataset.ply, 10);
+            if (!Number.isFinite(targetPly)) return;
+            const lessonPly = jmp.dataset.lessonPly != null
+              ? parseInt(jmp.dataset.lessonPly, 10)
+              : null;
+            if (this.handlers.onMistakeNavigate) {
+              try {
+                this.handlers.onMistakeNavigate({
+                  targetPly,
+                  lessonPly: Number.isFinite(lessonPly) ? lessonPly : null,
+                });
+              } catch (_err) {}
+            } else if (this.handlers.onJumpToPly) {
+              try { this.handlers.onJumpToPly(targetPly); } catch (_err) {}
+            }
+            return;
+          }
+          const main = e.target.closest(".ml-main");
+          if (main && main.dataset.ply != null) {
+            const ply = parseInt(main.dataset.ply, 10);
+            if (!Number.isFinite(ply)) return;
+            if (this.handlers.onMistakeNavigate) {
+              try { this.handlers.onMistakeNavigate({ targetPly: ply, lessonPly: ply }); } catch (_err) {}
+            } else if (this.handlers.onJumpToPly) {
+              try { this.handlers.onJumpToPly(ply); } catch (_err) {}
+            }
+          }
+        });
+      }
+      if (this.elements.mistakeLessonClose) {
+        this.elements.mistakeLessonClose.addEventListener("click", () => {
+          this.setMistakeLesson(null);
+        });
+      }
+      if (this.elements.mistakeTourPrev) {
+        this.elements.mistakeTourPrev.addEventListener("click", () => {
+          if (this.handlers.onMistakeTourPrev) {
+            try { this.handlers.onMistakeTourPrev(); } catch (_err) {}
+          }
+        });
+      }
+      if (this.elements.mistakeTourNext) {
+        this.elements.mistakeTourNext.addEventListener("click", () => {
+          if (this.handlers.onMistakeTourNext) {
+            try { this.handlers.onMistakeTourNext(); } catch (_err) {}
+          }
+        });
+      }
+      if (this.elements.reviewNav) {
+        this.elements.reviewNav.addEventListener("click", (e) => {
+          const b = e.target.closest("button[data-rn]");
+          if (!b) return;
+          const a = b.dataset.rn;
+          if (a === "start" && this.handlers.onReviewNavStart) {
+            try { this.handlers.onReviewNavStart(); } catch (_err) {}
+          } else if (a === "prev" && this.handlers.onReviewNavPrev) {
+            try { this.handlers.onReviewNavPrev(); } catch (_err) {}
+          } else if (a === "next" && this.handlers.onReviewNavNext) {
+            try { this.handlers.onReviewNavNext(); } catch (_err) {}
+          } else if (a === "end" && this.handlers.onReviewNavEnd) {
+            try { this.handlers.onReviewNavEnd(); } catch (_err) {}
+          }
+        });
+      }
+      if (this.elements.reviewNavSlider) {
+        this.elements.reviewNavSlider.addEventListener("input", (e) => {
+          const el = e.target;
+          const max = parseInt(el.max, 10) || 0;
+          const v = parseInt(el.value, 10) || 0;
+          if (this.elements.reviewNavPlyText) {
+            this.elements.reviewNavPlyText.textContent = `Ply ${v} / ${max}`;
+          }
+          if (this.handlers.onReviewNavSlider) {
+            try { this.handlers.onReviewNavSlider(v); } catch (_err) {}
+          }
+        });
+      }
       // 0.9.0: surface segmented control (Analyze / Learn). The controller
       // listens for onSurfaceChange so it can tear down the engine before
       // Learn takes over.
@@ -2632,7 +3372,10 @@
         this.setStatus("off");
         this.clearAnalysis();
       } else {
-        this.setStatus("starting engine...");
+        // 0.11.0: no live engine anymore. The controller will set a more
+        // specific status (e.g. "ready to review") as soon as it picks
+        // up the board and repaints the idle card.
+        this.setStatus("waiting for game...");
       }
     }
 
@@ -2642,9 +3385,243 @@
     }
 
     setDepth(n) {
-      if (!this.elements.depthSlider) return;
-      this.elements.depthSlider.value = String(n);
-      this.elements.depthLabel.textContent = String(n);
+      const v = Math.max(8, Math.min(24, Number(n) || 18));
+      if (this.elements.depthSlider) {
+        this.elements.depthSlider.value = String(v);
+        this.elements.depthLabel.textContent = String(v);
+      }
+      // Light up the matching preset button if the value is exactly on
+      // one of our presets; otherwise clear all actives (the slider
+      // itself shows the chosen value).
+      if (this.elements.batchDepthSeg) {
+        for (const b of this.elements.batchDepthSeg.querySelectorAll("button")) {
+          const d = parseInt(b.dataset.depth, 10);
+          b.classList.toggle("active", d === v);
+        }
+      }
+      if (this.elements.riDepthNum) {
+        this.elements.riDepthNum.textContent = String(v);
+      }
+      this.currentDepth = v;
+    }
+
+    // 0.11.0: Post-game batch Analyze state machine.
+    //
+    //   status: "idle" | "running" | "ready" | "stale"
+    //   payload (optional): {
+    //     moveCount, result, playerColor, depth,
+    //     hasMoveList, error   (idle-only)
+    //   }
+    setReviewState(status, payload) {
+      const allowed = new Set(["idle", "running", "ready", "stale"]);
+      const next = allowed.has(status) ? status : "idle";
+      if (this.root) this.root.setAttribute("data-review-state", next);
+      const p = payload || {};
+
+      if (next === "idle" && this.elements.reviewIdle) {
+        const mc = p.moveCount | 0;
+        const res = p.result ? p.result : null;
+        const col = p.playerColor === "b" ? "BLACK" : "WHITE";
+        const hasMoves = mc > 0 && (p.hasMoveList !== false);
+        if (this.elements.reviewIdleSummary) {
+          if (hasMoves) {
+            // Normal happy-path summary: X moves, player colour, result.
+            const parts = [];
+            parts.push(`<span class="ri-tag">${mc} ${mc === 1 ? "move" : "moves"}</span>`);
+            parts.push(`You played <b>${col}</b>`);
+            if (res) parts.push(`Result <b>${escapeHtml(res)}</b>`);
+            else parts.push("Result pending");
+            this.elements.reviewIdleSummary.innerHTML = parts.join(" &middot; ");
+          } else {
+            // Empty-state copy: tell the user *what to do* rather than
+            // showing "0 moves . You played WHITE" which reads like a bug.
+            this.elements.reviewIdleSummary.innerHTML =
+              "No chess.com move list detected on this page. " +
+              "Open a <b>finished</b> game (or the analysis board with a PGN loaded), " +
+              "then come back -- the button below will light up automatically.";
+          }
+        }
+        if (this.elements.reviewIdleDepth) {
+          this.elements.reviewIdleDepth.textContent = String(p.depth || this.currentDepth || 18);
+        }
+        if (this.elements.reviewIdleBtn) {
+          this.elements.reviewIdleBtn.disabled = !hasMoves;
+          this.elements.reviewIdleBtn.textContent = hasMoves
+            ? "Analyze this game"
+            : "Waiting for a game...";
+        }
+        if (this.elements.reviewIdle) {
+          this.elements.reviewIdle.classList.toggle("has-error", !!p.error);
+          if (this.elements.reviewIdleError) {
+            this.elements.reviewIdleError.textContent = p.error || "";
+          }
+        }
+      }
+
+      if (next === "running" && this.elements.reviewRunning) {
+        // The running card is mostly repainted by setReviewProgress.
+        // Only reset fields here so the transition doesn't show stale
+        // text from a previous run.
+        if (this.elements.reviewRunningText) {
+          this.elements.reviewRunningText.textContent = "0 / 0 plies";
+        }
+        if (this.elements.reviewRunningFill) {
+          this.elements.reviewRunningFill.style.width = "0%";
+        }
+        if (this.elements.reviewRunningEta) {
+          this.elements.reviewRunningEta.textContent = "estimating...";
+        }
+        if (this.elements.reviewRunningCurrent) {
+          this.elements.reviewRunningCurrent.textContent = "";
+        }
+      }
+
+      if (next === "stale" && this.elements.reviewStale) {
+        // No per-instance data for stale -- the copy is fixed.
+      }
+    }
+
+    setReviewProgress(progress) {
+      if (!this.elements.reviewRunning) return;
+      const p = progress || {};
+      const done = Math.max(0, p.done | 0);
+      const total = Math.max(1, p.total | 0);
+      const pct = Math.min(100, Math.round((done / total) * 100));
+      if (this.elements.reviewRunningText) {
+        this.elements.reviewRunningText.textContent =
+          `${done} / ${total} plies (${pct}%)`;
+      }
+      if (this.elements.reviewRunningFill) {
+        this.elements.reviewRunningFill.style.width = `${pct}%`;
+      }
+      if (this.elements.reviewRunningEta) {
+        if (p.etaSec === null || p.etaSec === undefined) {
+          this.elements.reviewRunningEta.textContent = "estimating...";
+        } else if (p.etaSec <= 1) {
+          this.elements.reviewRunningEta.textContent = "almost done";
+        } else {
+          this.elements.reviewRunningEta.textContent = `~${p.etaSec}s remaining`;
+        }
+      }
+      if (this.elements.reviewRunningCurrent) {
+        const ply = p.currentPly | 0;
+        const san = p.currentSan ? ` &middot; ${escapeHtml(p.currentSan)}` : "";
+        this.elements.reviewRunningCurrent.innerHTML = ply > 0
+          ? `analyzing ply ${ply}${san}`
+          : "warming up engine...";
+      }
+    }
+
+    setReviewNav(nav) {
+      const n = nav || {};
+      const max = Math.max(0, n.maxPly | 0);
+      const ply = Math.max(0, Math.min(max, n.ply | 0));
+      const syncing = !!n.syncing;
+      if (this.elements.reviewNavSlider) {
+        const sl = this.elements.reviewNavSlider;
+        sl.max = String(max);
+        sl.value = String(ply);
+      }
+      if (this.elements.reviewNavPlyText) {
+        this.elements.reviewNavPlyText.textContent = `Ply ${ply} / ${max}`;
+      }
+      if (this.elements.reviewNavSync) {
+        this.elements.reviewNavSync.style.display = syncing ? "inline" : "none";
+      }
+    }
+
+    setMistakeList(entries) {
+      this.setMistakeLesson(null);
+      if (!this.elements.mistakeList) return;
+      const body = this.elements.mistakeListBody;
+      if (!body) return;
+      body.innerHTML = "";
+      if (!Array.isArray(entries) || entries.length === 0) {
+        this.elements.mistakeList.classList.add("hidden");
+        return;
+      }
+      this.elements.mistakeList.classList.remove("hidden");
+      for (const e of entries) {
+        const row = document.createElement("div");
+        row.className = `ml-row sev-${e.severity || "inaccuracy"}`;
+        const plyAfter = e.plyAfter != null ? e.plyAfter : e.ply;
+        const plyBefore = e.plyBefore != null ? e.plyBefore : null;
+        row.title =
+          plyBefore != null
+            ? `Open lesson · before ply ${plyBefore} · after ply ${plyAfter}`
+            : `Open lesson · ply ${plyAfter}`;
+        const miss = e.missedText
+          ? `<span class="ml-miss">${escapeHtml(e.missedText)}</span>`
+          : "";
+        const beforeBtn =
+          plyBefore != null && Number.isFinite(plyBefore)
+            ? `<button type="button" class="ml-jump" data-ply="${plyBefore}" data-lesson-ply="${plyAfter}" title="Go to the position before this move (lesson stays on this mistake)">Before</button>`
+            : "";
+        row.innerHTML = `
+          <button type="button" class="ml-main" data-ply="${plyAfter}"
+            title="Jump here and show why this move hurt">
+            <span class="ml-move">${escapeHtml(e.moveLabel || "")}</span>
+            <span class="ml-label">${escapeHtml(e.label || "")}</span>
+            <span class="ml-badge">${escapeHtml(e.badge || "")}</span>
+            ${miss}
+          </button>
+          <div class="ml-actions">
+            ${beforeBtn}
+            <button type="button" class="ml-jump" data-ply="${plyAfter}" data-lesson-ply="${plyAfter}"
+              title="Jump to position after this move and show the lesson">After</button>
+          </div>
+        `;
+        body.appendChild(row);
+      }
+    }
+
+    setMistakeLesson(lesson) {
+      const box = this.elements.mistakeLesson;
+      if (!box) return;
+      const tourEl = this.elements.mistakeTour;
+      if (!lesson || (!lesson.why && !lesson.better && !lesson.next)) {
+        box.classList.add("hidden");
+        if (this.elements.mistakeLessonWhy) this.elements.mistakeLessonWhy.textContent = "";
+        if (this.elements.mistakeLessonBetter) this.elements.mistakeLessonBetter.textContent = "";
+        if (this.elements.mistakeLessonNext) this.elements.mistakeLessonNext.textContent = "";
+        if (tourEl) tourEl.classList.add("hidden");
+        if (this.elements.mistakeTourPrev) this.elements.mistakeTourPrev.disabled = true;
+        if (this.elements.mistakeTourNext) this.elements.mistakeTourNext.disabled = true;
+        return;
+      }
+      const tour = lesson.tour;
+      if (tourEl) {
+        if (tour && tour.total > 0 && tour.index > 0) {
+          tourEl.classList.remove("hidden");
+          if (this.elements.mistakeTourText) {
+            this.elements.mistakeTourText.textContent =
+              tour.total === 1 ? "Mistake 1 of 1" : `Mistake ${tour.index} of ${tour.total}`;
+          }
+          if (this.elements.mistakeTourPrev) {
+            this.elements.mistakeTourPrev.disabled = tour.index <= 1;
+          }
+          if (this.elements.mistakeTourNext) {
+            this.elements.mistakeTourNext.disabled = tour.index >= tour.total;
+          }
+        } else {
+          tourEl.classList.add("hidden");
+          if (this.elements.mistakeTourPrev) this.elements.mistakeTourPrev.disabled = true;
+          if (this.elements.mistakeTourNext) this.elements.mistakeTourNext.disabled = true;
+        }
+      }
+      box.classList.remove("hidden");
+      if (this.elements.mistakeLessonWhy) {
+        this.elements.mistakeLessonWhy.textContent = lesson.why || "";
+      }
+      if (this.elements.mistakeLessonBetter) {
+        this.elements.mistakeLessonBetter.textContent = lesson.better || "";
+      }
+      if (this.elements.mistakeLessonNext) {
+        this.elements.mistakeLessonNext.textContent = lesson.next || "";
+      }
+      try {
+        box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } catch (_e) {}
     }
 
     setAssessment(a) {
@@ -2664,21 +3641,31 @@
 
     setLastMove(m) {
       if (!this.elements.lastMove) return;
-      if (!m || !m.label) {
+      const headline = (m && (m.headline || m.label)) || "";
+      if (!m || !headline) {
         this.elements.lastMove.classList.add("hidden");
         this.elements.lastMove.classList.remove("show-detail");
+        if (this.elements.lmBestNote) {
+          this.elements.lmBestNote.textContent = "";
+          this.elements.lmBestNote.classList.remove("visible");
+        }
         return;
       }
       this.elements.lastMove.classList.remove("hidden");
-      this.elements.lastMoveText.textContent = m.label;
-      this.elements.lastMoveText.className = `quality sev-${m.severity || "neutral"}`;
+      if (this.elements.lastMoveHeadline) {
+        this.elements.lastMoveHeadline.textContent = headline;
+        this.elements.lastMoveHeadline.className = `lm-headline sev-${m.severity || "neutral"}`;
+      }
       this.elements.lastMoveBadge.textContent = m.badge || "";
       this.elements.lastMoveBadge.className = `badge sev-${m.severity || "neutral"}`;
       this.elements.lastMoveDetail.textContent = m.detail || "";
 
-      // 0.10.0: secondary "Best was Nxe5 -- missed +1.20" row. Only
-      // rendered when content.js supplied a bestSan; a matching move
-      // (best, brilliant, great) leaves bestSan empty so we hide it.
+      if (this.elements.lmBestNote) {
+        const note = m.bestLineNote || "";
+        this.elements.lmBestNote.textContent = note;
+        this.elements.lmBestNote.classList.toggle("visible", !!note);
+      }
+
       if (this.elements.lmBest) {
         if (m.bestSan) {
           this.elements.lmBest.classList.remove("hidden");

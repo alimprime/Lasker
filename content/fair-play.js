@@ -99,11 +99,26 @@
     "[data-cy='game-over-modal']",
     ".board-modal-header-component",
     ".live-game-over-message",
+    // chess.com refreshes layouts often — cast a slightly wider net.
+    "[data-cy='game-result']",
+    "[class*='game-over-modal']",
+    "[class*='GameOverModal']",
   ];
 
   function gameIsOver() {
     for (const sel of GAME_OVER_SELECTORS) {
-      if (document.querySelector(sel)) return true;
+      try {
+        if (document.querySelector(sel)) return true;
+      } catch (_e) { /* invalid selector in older browsers — skip */ }
+    }
+    // Fallback: finished games usually print the result inside the move list.
+    const ml = document.querySelector(
+      "wc-simple-move-list, vertical-move-list, .move-list-wrapper-component, .move-list-component, [data-cy='move-list']"
+    );
+    if (ml) {
+      const t = (ml.textContent || "").replace(/\s+/g, " ");
+      if (/\b(1-0|0-1|1\/2-1\/2)\b/.test(t)) return true;
+      if (/\u00BD-\u00BD/.test(t)) return true;
     }
     return false;
   }

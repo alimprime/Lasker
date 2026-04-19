@@ -5,70 +5,121 @@ what LASKER is, how it's built, where every piece lives, how to run it,
 and the known limitations and next steps. Keep it up to date when you
 change the architecture.
 
-Current version: **0.10.0**
+Current version: **0.11.0**
 
 ---
 
 ## 1. What this project is
 
-**Lasker** is a Chrome extension (Manifest V3) that adds a live chess
-position evaluation overlay to **chess.com**. When enabled, it:
+**Lasker** is a Chrome extension (Manifest V3) that adds a **post-game
+review** overlay to **chess.com**. Two explicit surfaces, picked in the
+drawer header:
 
-- Reads the current board state from the chess.com page DOM
-- Runs Stockfish 18 (WebAssembly) locally in the user's browser
+- **Analyze** (0.11.0+) — one-click **batch** post-game review.
+  Nothing runs automatically: the student finishes a game, clicks
+  *Analyze this game* in LASKER's idle card, and LASKER then:
+  1. Reads the full SAN move list from chess.com's DOM
+     (`content/move-list-reader.js`).
+  2. Expands it into a ply-by-ply FEN sequence
+     (`LaskerOpeningBook.expandLineWithFens`).
+  3. Runs Stockfish 18 (WebAssembly, local, in-browser) against every
+     position at the user's chosen depth (presets: **Fast 14 /
+     Normal 18 / Deep 22**).
+  4. Classifies each move, looks up opening names, records the best
+     reply + PV, and caches the whole thing in memory keyed by the
+     grid hash (`content/analyze-session.js`).
+  5. Rewinds chess.com's board to the starting position.
+  6. Thereafter, as the user steps through the game with chess.com's
+     own forward/back controls, the overlay serves instant cached
+     feedback — **no engine re-kick per ply**. Jumping to a mistake
+     from the clickable mistake list simulates chess.com's nav
+     buttons to land on that exact ply.
+  The engine is **completely torn down** once the batch finishes.
+  The live "what to play next" advisor that shipped through 0.10 is
+  gone.
+- **Learn** — curated Opening Library + directive Study mode. Engine
+  fully off. Unchanged in 0.11.0.
+
+LASKER also:
+
 - Looks up opening names and named continuations in a bundled offline
   database built from the `lichess-org/chess-openings` dataset. The
   builder walks the full PGN of every one of the 3690 upstream entries,
   yielding **7601 named positions** and **5290 parent positions with
   7789 continuation pointers** -- enough depth for every mainline ply
   through at least move 10.
-- Turns Stockfish's top move into a human-readable hint
+- Turns Stockfish's best move into a human-readable hint
   ("Play Nf3 - natural developing square; fights for the centre.
-  Holds a small plus (+0.32).")
-- Offers "Read on Wikipedia" and "Study on Lichess" deep-links for the
-  current opening / position.
-- Displays everything in a small floating panel injected into the page
+  Holds a small plus (+0.32).") — now served from the cache.
+- Displays everything in a Shadow-DOM drawer injected into the page.
 
 The extension is **fully offline**: no network calls at runtime, no
 external APIs, no account, no API keys, no telemetry.
 
-### What the overlay shows (top to bottom)
+### What the overlay shows (Analyze surface, per review state)
 
-1. **Header** with the title, a dot status indicator, a settings gear, and
-   the ON/OFF toggle.
-2. **Evaluation** section: the vertical eval bar on the left (flipped so
-   the player's color sits at the bottom), the numeric score from
-   white's perspective (e.g. `+1.35`, `-0.80`, `M3`), a small depth
-   status line, and a `You [WHITE|BLACK]` caption making the player
-   perspective explicit.
-3. **Assessment line** -- human-readable summary of the position, e.g.
-   "Balanced", "White has a slight edge", "Black is completely winning",
-   "White mates in 5". Color-coded by severity.
-4. **Last move line** -- quality of the move just played, computed from
-   the eval swing: **Brilliant !!**, **Great move !**, **Best**,
-   **Good move**, **Book move**, **Inaccuracy ?!**, **Mistake ?**,
-   **Blunder ??**. Includes a `?` "clarify" button that expands to show
-   the raw delta, e.g. `Eval (from mover): +0.20 -> -1.50 (Δ -1.70)`.
-5. **Opening section** (while the position is in book -- typically the
-   first 10-15 plies of mainlines): opening name, ECO code, two
-   read-more links ("Read on Wikipedia" goes to a Wikipedia search for
-   the parent opening; "Study on Lichess" deep-links to the exact FEN
-   on `lichess.org/analysis`), and a scrollable list of **named
-   continuations** -- each row shows `SAN | opening name | ECO`, so the
-   user can see e.g. `Nf3 | King's Knight Opening | C40` or
-   `c5 | Sicilian Defense | B20`. Thanks to the full-path builder the
-   list stays populated through mainline move 5+ for every major
-   opening family.
-6. **Stockfish suggests** section -- one-line plain-English advice
-   generated from the engine's top PV move, e.g.
-   *"Play Bb5 - good diagonal for the bishop. Holds a small plus
-   (+0.52)."* Hidden until the engine reports a line.
-7. **Top engine lines** -- up to 3 principal variations, each with its
-   own score and the first ~8 plies in UCI notation.
-8. **Depth slider** (8 to 22) controlling Stockfish search depth.
-9. **Settings panel** (toggled via the gear):
-    - Theme: **Dark / Light**
-    - Size: **Small (280px) / Medium (340px) / Large (480px)**
+The Analyze surface is a four-state machine keyed on
+`data-review-state` attribute of `.root`:
+
+**`idle`** — no batch has run in this tab session.
+- A single **"Analyze this game"** card with a short summary
+  (`42 moves · You played BLACK · Result 1-0`), the current **Batch
+  depth**, the primary action button, and a copy blurb explaining
+  that the engine runs locally and tears down after the batch. If no
+  move list is detected on the page the button says *"No game
+  detected"* and is disabled.
+
+**`running`** — the batch is executing.
+- Title, `X / Y plies (N%)` text, a thin progress bar, an ETA
+  (`~12s remaining`), a live "analyzing ply 42 · Nxe5" line, and a
+  **Cancel** button. All other Analyze blocks (timeline, eval bar,
+  last-move, summary, mistake list) are hidden.
+
+**`ready`** — the review cache is populated; the user is stepping
+through cached positions.
+1. **Header** with title, status dot, settings gear, ON/OFF toggle,
+   Analyze/Learn segmented control, clean-state button.
+2. **Move timeline** strip — every classified ply rendered as a
+   colored dot (green = best/brilliant, yellow = inaccuracy, orange =
+   mistake, red = blunder, blue = book). Rebuilt from cache on
+   completion; does not re-push as the user scrubs.
+3. **Evaluation** — vertical eval bar, numeric score from white's POV,
+   depth label, `You [WHITE|BLACK]` caption.
+4. **Assessment line** (`"Balanced"`, `"White is clearly better"`,
+   `"White mates in 5"`).
+5. **Last-move card** — `Best · Brilliant !! · Inaccuracy ?!` etc.,
+   expandable `?` clarify bubble showing the raw delta, plus a
+   secondary `Best was Nxe5 · missed +1.20` row when the student
+   didn't play the engine's #1.
+6. **Slim opening pill** when the current position is still in book.
+7. **Insight bubble** — one-line "Play Bb5 — good diagonal; holds a
+   small plus (+0.52)", driven from the cached best move.
+8. **Principle chips** — king safety / development / centre
+   (computed from the live grid every tick).
+9. **Top engine line** — the PV stored at this ply.
+10. **Mistake list** — clickable rows for every inaccuracy / mistake
+    / blunder. Clicking a row simulates chess.com's nav buttons to
+    jump the board to that exact ply.
+11. **Session summary** — per-severity tally + accuracy %.
+
+**`stale`** — the user navigated the board outside the analyzed
+plies (played a new move, took a move back beyond start, opened a
+different game). Shows a single "Off-book" banner and a **Re-analyze
+from start** button.
+
+### Settings (0.11.0)
+
+Toggled via the gear:
+- **Batch depth** — three presets (Fast 14 / Normal 18 / Deep 22)
+  plus a fine slider from 8–24. Applies on the **next** batch run;
+  there is no live engine to re-kick.
+- **Mode** — Focus / Advanced.
+- **Advisor** — My side / Both sides. Re-renders the timeline,
+  mistake list, last-move card and summary from the existing cache
+  (no re-run needed).
+- **Theme** — Dark / Light.
+- **Size** — Small / Medium / Large (or custom drag-width).
+- **Board arrows** — On / Off.
 
 ### Intended use
 
@@ -181,6 +232,159 @@ Advanced is a one-click reveal for everything else.
 
 In `my-side`, the move timeline only collects my plies -- which makes a
 review feel like *your* game's story instead of a dense dotted line.
+
+### Post-game batch Analyze (0.11.0+)
+
+The headline change of 0.11.0: **Analyze is no longer a live advisor**.
+The earlier behaviour — poll the board every 500 ms, feed whatever
+position is on screen into Stockfish, display a `"play Nf3"` hint —
+was deleted wholesale. In its place is a **one-click batch reviewer**.
+
+**Why.** Live advice while stepping through a game had two real
+failure modes in user feedback:
+
+- It felt like a cheat-assist even in allowed contexts, because the
+  engine was "breathing down the user's neck" exactly like it would
+  if you pointed it at a live game.
+- Walking back and forth through a game re-kicked Stockfish on every
+  step, stranding half-finished searches and making the eval flicker
+  as depth climbed back up.
+
+Batch review fixes both: the student commits to "I want feedback on
+this finished game", LASKER does the work once at the chosen depth,
+and from then on every overlay panel is served from memory.
+
+**Flow / state machine.**
+
+```
+idle    -- click [Analyze this game] -->  running
+running -- batch complete             -->  ready
+running -- Cancel | unsafe context    -->  idle
+ready   -- board hash in cache        -->  ready
+ready   -- board hash NOT in cache    -->  stale
+stale   -- click [Re-analyze]         -->  running
+```
+
+`state.review.status` in `content/content.js` holds the current
+value. The overlay reflects it via `data-review-state` on `.root`;
+the CSS hides every cache-driven block (timeline, eval bar,
+last-move, principle chips, opening pill, insight, lines, mistake
+list, summary) whenever the state isn't `ready`.
+
+**Per-ply cache schema.** `LaskerAnalyzeSession.run({sans, depth,
+onProgress, signal, playerColor, result})` returns
+
+```js
+{
+  plies: PlyEntry[],              // length = sans.length + 1 (ply 0 = start)
+  byHash: Map<string, PlyEntry>,  // keyed by LaskerOpeningBook.gridHash
+  playerColor: "w" | "b",
+  result: "1-0" | "0-1" | "1/2-1/2" | null,
+  startHash, totalMoves, depth,
+}
+
+PlyEntry = {
+  ply,                    // 0..N; 0 = starting position
+  fen, hash, grid, turn,  // position AT this ply; turn = side to move
+  lastSan, lastUci, mover, // move that LED here (null for ply 0)
+  scoreCp, scoreMate,      // eval AT this position, side-to-move POV
+  whiteCp, whiteMate,      // same, flipped to white's POV
+  depth,                   // max depth reached by Stockfish for this ply
+  bestUci, bestSan,        // engine's best reply FROM this position
+  pv,                      // PV (first ~8 UCIs)
+  classification,          // classifyMove() output for the move that
+                           //   led here (null for ply 0); includes
+                           //   `bestSan` + `missedText` when it differs
+                           //   from the engine's #1 at the previous ply
+  assessment,              // assessPosition() output AT this position
+  opening, inBook,         // { name, eco } | null, and whether it's in book
+}
+```
+
+The cache lives in memory for the tab session only — nothing is
+written to `chrome.storage.local`. Opening another game or
+re-analyzing clears it. Since the hash is the compact 64-char grid
+fingerprint produced by `board-reader.js`, a live position lookup is
+just `byHash.get(position.hash)` — O(1).
+
+**On every poll-loop tick in Analyze,** `content.js` calls
+`paintFromCache(entry)`:
+
+- `setEvaluation({scoreCp, scoreMate, depth, lines, turn, playerColor})`
+- `setAssessment`, `setLastMove` (with my-side muting), `setPrinciples`
+  (from live grid), `setOpeningPill`, `setEngineHint` (running through
+  `LaskerEngineHints.describeMove`), and `renderArrows` (student-side
+  only, served from `entry.bestUci`).
+
+**Cancellation.** The session owns an `AbortController`; `signal.aborted`
+causes `engine.stop()` + worker teardown mid-batch. Lifecycle hooks
+that MUST cancel any running batch:
+
+- `setEnabled(false)` — user toggled LASKER off
+- `applyContext(unsafe)` — fair-play context flipped to live-play
+- `setSurface("learn")` — user switched surfaces
+- `resetState()` — clean-state button
+- `reanalyze()` — explicit re-run
+
+**Jump-to-mistake.** The `.mistake-list` rows in the overlay carry
+`data-ply="N"`. Clicking a row calls `content.js#jumpToPly(N)`, which
+in turn calls `LaskerMoveListReader.goToPly(N)`. That hits chess.com's
+own toolbar buttons (`aria-label` matching, with keyboard-event
+fallback) — first `Go to start`, then `Move forward` N times with a
+small await between clicks. The poll loop picks up the new board
+state naturally and finds the cache entry by hash.
+
+**Files that changed.**
+
+- `manifest.json` — version bump, description rewrite, two new
+  content scripts registered before `stockfish-worker.js` and
+  `overlay.js`.
+- `content/move-list-reader.js` (new) — DOM scraper for chess.com's
+  move list; covers `wc-simple-move-list`, `vertical-move-list`,
+  `.move-list-wrapper-component`, `.move-list-component`, and
+  `[data-cy="move-list"]`. `readMoves()` returns a clean SAN array.
+  `goToStart / goToNext / goToPrev / goToEnd / goToPly` drive the
+  chess.com nav buttons (aria-label based, falls back to synthetic
+  `ArrowRight`/`Home` keyboard events). `detectResult()` scrapes the
+  game-over banner. `detectPlayerColor()` reports the student's side.
+- `content/opening-book.js` — new `expandLineWithFens(sanList)` that
+  produces a ply-by-ply FEN sequence (plus `startFen`, `startGrid`,
+  `startHash`). Used by the batch runner; the existing `expandLine`
+  is unchanged so Study mode isn't affected. Castling rights are
+  inferred from king/rook positions at each step; en-passant is
+  `-` (minor approximation that rarely affects the eval).
+- `content/analyze-session.js` (new) — `window.LaskerAnalyzeSession.run(...)`.
+  Owns exactly one `LaskerEngine` instance for the batch; tears it
+  down on completion or cancel. Per-ply `analyzePosition` latches
+  onto the highest-depth `multipv=1` info line and resolves on
+  `bestmove`. A per-ply safety timeout (20s default) prevents a
+  wedged worker from blocking the whole batch.
+- `content/content.js` — the live-engine path is gone. Analyze's
+  `onPositionChanged` is now a cache lookup + `paintFromCache`; misses
+  in `ready` flip the state to `stale`. New entry points
+  `startBatchAnalysis / cancelBatchAnalysis / reanalyze / jumpToPly`.
+  Tally / timeline / mistake list are rebuilt from the full review in
+  one shot at batch completion (and again when the advisor scope
+  changes).
+- `content/overlay.js` — three new state cards inside the Analyze
+  body (`.review-idle`, `.review-running`, `.review-stale`), a
+  `.mistake-list` block above the summary, and CSS gating via the
+  `data-review-state` attribute on `.root`. Depth slider moved from
+  the Analyze footer into Settings as **Batch depth** with Fast /
+  Normal / Deep presets + a fine slider, labelled "Applies on the
+  next batch run." New mount-time handlers: `onStartBatch`,
+  `onCancelBatch`, `onReanalyze`, `onJumpToPly`. New methods:
+  `setReviewState`, `setReviewProgress`, `setMistakeList`.
+
+**Fair-play integration.** Unchanged. `canRun()` still gates both the
+poll loop and `startBatchAnalysis` on `ctx.safe && engineAllowed`.
+If the context flips unsafe mid-batch, `applyContext(unsafe)` calls
+`cancelBatchAnalysis()` before tearing down everything.
+
+**Engine concurrency.** One `LaskerEngine` instance at a time.
+`analyze-session.js` owns it for the duration of the batch; during
+`ready` there is no engine running anywhere. That removes a class of
+0.10 bugs where the live engine kept thinking after the user paused.
 
 ### Brand rename, Space Grotesk, student-side arrows, deeper move review (0.10.0+)
 
@@ -498,12 +702,14 @@ Lasker/
 │   ├── fair-play.js                page-context classifier (safe / unsafe gate)
 │   ├── board-reader.js             DOM -> FEN extraction (also exposes grid)
 │   ├── analysis-labels.js          pure helpers: assessPosition + classifyMove
-│   ├── opening-book.js             offline ECO DB client + curated catalog + san->uci
+│   ├── opening-book.js             offline ECO DB client + curated catalog + san->uci + expandLineWithFens (0.11+)
 │   ├── engine-hints.js             describeMove(): UCI/SAN -> human sentence
 │   ├── board-arrows.js             SVG overlay drawn over <wc-chess-board> (0.8+)
-│   ├── overlay.js                  Shadow-DOM panel (theme + size + timeline + library)
+│   ├── move-list-reader.js         (0.11+) chess.com move-list DOM scraper + nav-button driver
+│   ├── analyze-session.js          (0.11+) batch Stockfish runner; owns one LaskerEngine per batch
+│   ├── overlay.js                  Shadow-DOM panel (theme + size + timeline + library + review state)
 │   ├── overlay.css                 stub (all styles live in Shadow DOM)
-│   └── content.js                  controller: poll loop + orchestration + study mode
+│   └── content.js                  controller: poll loop + batch orchestration + study mode
 ├── engine/
 │   ├── stockfish.js                Stockfish 18 Lite single-thread loader (~20KB)
 │   ├── stockfish.wasm              Stockfish WASM binary (~7MB)
@@ -532,30 +738,48 @@ Total extension bundle size: approximately 9.5 MB (7 MB WASM binary +
 ## 3. Architecture at a glance
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         chess.com page (tab)                         │
-│                                                                      │
-│  ┌──────────────────┐                                                │
-│  │ board-reader.js  │───> <wc-chess-board> / <chess-board> DOM       │
-│  └──────────────────┘                                                │
-│           │                                                          │
-│           │ fen, hash                                                │
-│           ▼                                                          │
-│  ┌──────────────────────────┐   UCI    ┌────────────────────────┐    │
-│  │ content.js (controller)  │──────────> engine/stockfish-worker│    │
-│  │                          │<──────── (Blob: Worker -> wasm)   │    │
-│  └──┬──┬────────────────────┘  info     └────────────────────────┘   │
-│     │  │  fen                                                        │
-│     │  └──────> opening-book.js ──fetch──> data/openings.json        │
-│     │                     (offline ECO DB, 3.7k entries)             │
-│     │                                                                │
-│     │ assessPosition / classifyMove (pure fn in analysis-labels.js)  │
-│     ▼                                                                │
-│  ┌──────────────────┐                                                │
-│  │ overlay.js       │  theme, size, settings persist in storage      │
-│  │ (Shadow DOM UI)  │                                                │
-│  └──────────────────┘                                                │
-└──────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                          chess.com page (tab)                          │
+│                                                                        │
+│  ┌──────────────────┐                                                  │
+│  │ board-reader.js  │───> <wc-chess-board> / <chess-board> DOM         │
+│  └──────────────────┘     (live grid + flipped state)                  │
+│           │                                                            │
+│           │ fen, hash                                                  │
+│           ▼                                                            │
+│  ┌────────────────────────────┐                                        │
+│  │ content.js (controller)    │                                        │
+│  │                            │                                        │
+│  │  state.review: {           │         ┌──────────────────────────┐   │
+│  │    status: idle|running    │──start──▶ analyze-session.js       │   │
+│  │            |ready|stale,   │         │  (owns 1 LaskerEngine    │   │
+│  │    byHash: Map<h,PlyEntry> │         │   for the batch)         │   │
+│  │    plies: PlyEntry[],      │◀─done───│  run({sans, depth, ...}) │   │
+│  │    ...                     │         └─┬────────────────────────┘   │
+│  │  }                         │           │   UCI + info               │
+│  │                            │           ▼                            │
+│  │   on position change:      │   ┌──────────────────────┐             │
+│  │    entry = byHash.get(h)   │   │ engine/stockfish-    │             │
+│  │    paintFromCache(entry)   │   │ worker.js (Blob ->   │             │
+│  │                            │   │ WASM worker)         │             │
+│  │                            │   └──────────────────────┘             │
+│  └──┬──┬─────────────┬────────┘                                        │
+│     │  │             │                                                 │
+│     │  │             ├─ move-list-reader.js ─▶ .move-list DOM          │
+│     │  │             │    (SAN scraping + nav-button simulation)       │
+│     │  └──▶ opening-book.js ──fetch──▶ data/openings.json              │
+│     │        (names + expandLineWithFens)                              │
+│     │                                                                  │
+│     │ assessPosition / classifyMove (pure fn in analysis-labels.js)    │
+│     ▼                                                                  │
+│  ┌───────────────────────────────────────────┐                         │
+│  │ overlay.js (Shadow DOM UI)                │                         │
+│  │   data-review-state = idle|running|       │                         │
+│  │                       ready|stale         │                         │
+│  │   setReviewState/setReviewProgress/       │                         │
+│  │   setMistakeList + existing setters       │                         │
+│  └───────────────────────────────────────────┘                         │
+└────────────────────────────────────────────────────────────────────────┘
                                │ chrome.runtime
                                ▼
                       ┌──────────────────┐
@@ -593,13 +817,17 @@ Manifest V3. Declares:
 - `content_scripts` matched against `https://www.chess.com/*`, loaded at
   `document_idle`. JS files are loaded in this order (later files depend
   on globals set by earlier ones):
-  1. `content/board-reader.js`    -> `window.LaskerBoardReader`
-  2. `content/analysis-labels.js` -> `window.LaskerLabels`
-  3. `content/opening-book.js`    -> `window.LaskerOpeningBook`
-  4. `content/engine-hints.js`    -> `window.LaskerEngineHints`
-  5. `engine/stockfish-worker.js` -> `window.LaskerEngine`
-  6. `content/overlay.js`         -> `window.LaskerOverlay`
-  7. `content/content.js`         -> controller
+  1. `content/fair-play.js`       -> `window.LaskerFairPlay`
+  2. `content/board-reader.js`    -> `window.LaskerBoardReader`
+  3. `content/analysis-labels.js` -> `window.LaskerLabels`
+  4. `content/opening-book.js`    -> `window.LaskerOpeningBook`
+  5. `content/engine-hints.js`    -> `window.LaskerEngineHints`
+  6. `content/board-arrows.js`    -> `window.LaskerBoardArrows`
+  7. `content/move-list-reader.js` -> `window.LaskerMoveListReader` (0.11+)
+  8. `engine/stockfish-worker.js` -> `window.LaskerEngine`
+  9. `content/analyze-session.js` -> `window.LaskerAnalyzeSession` (0.11+)
+ 10. `content/overlay.js`         -> `window.LaskerOverlay`
+ 11. `content/content.js`         -> controller
 - `web_accessible_resources`: `engine/stockfish.js`,
   `engine/stockfish.wasm`, and `data/openings.json`.
 - `host_permissions`: `https://www.chess.com/*` only. All opening data
@@ -849,19 +1077,27 @@ The controller, guarded by `window.__laskerLoaded`.
 Startup:
 
 1. Load settings from `chrome.storage.local["lasker.settings"]` and
-   the fair-play acceptance flag from `chrome.storage.local["lasker.acceptedFairPlay"]`.
-   Defaults: `{ enabled: false, depth: 15, theme: "dark", size: "medium", collapsed: false }`.
+   the fair-play acceptance flag from
+   `chrome.storage.local["lasker.acceptedFairPlay"]`. Defaults
+   include `{ enabled: false, depth: 18, theme: "dark",
+   size: "medium", collapsed: false, mode: "focus",
+   advisor: "my-side", showArrows: true, surface: "analyze" }`.
 2. Safety gate: if `enabled=true` but `acceptedFairPlay=false`, force
    `enabled=false` so the toggle starts OFF until the modal is accepted.
 3. Wait for the chess.com board via MutationObserver.
 4. Mount the overlay with handlers for toggle / depth / theme / size /
-   collapsed.
-5. Subscribe to `LaskerFairPlay`; the subscriber callback (`applyContext`)
-   is what actually drives the lifecycle -- see below.
+   collapsed / mode / advisor / width / arrows / surface / reset /
+   opening-pick / study-by-id / exit-study / **onStartBatch /
+   onCancelBatch / onReanalyze / onJumpToPly** (0.11+).
+5. Mount `LaskerBoardArrows` over the live board.
+6. Kick off the offline opening catalog load (lazy).
+7. Subscribe to `LaskerFairPlay`; the subscriber callback
+   (`applyContext`) drives the lifecycle (see below).
 
 Toggle flow (`requestEnable(on)`):
 
-- Turning OFF: immediate `setEnabled(false)`.
+- Turning OFF: immediate `setEnabled(false)` -- cancels any running
+  batch, stops polling, resets `state.review` to idle.
 - Turning ON, first time ever: show the fair-play acknowledgement modal.
   `setEnabled(true)` only runs after the user ticks the checkbox and
   clicks Enable; only then do we persist `acceptedFairPlay=true`.
@@ -869,60 +1105,77 @@ Toggle flow (`requestEnable(on)`):
 
 Fair-play lifecycle (`applyContext(ctx)`):
 
-- `ctx.safe === false` -> stop polling, tear down the Stockfish worker,
-  clear the timeline and analysis, set status to `"paused (fair-play)"`.
-  The overlay flips into locked view automatically via `setContext`.
-- `ctx.safe === true && enabled && accepted` -> reset move-tracking
-  state, clear the timeline, resume polling.
+- `ctx.safe === false` -> `cancelBatchAnalysis()`, stop polling,
+  clear the review cache, reset timeline/summary/mistake-list, set
+  status to `"paused (fair-play)"`. The overlay flips into locked
+  view automatically via `setContext`.
+- `ctx.safe === true && enabled && accepted` -> reset state, clear
+  the review cache, resume polling, refresh the idle card with the
+  currently visible game summary.
 
 `canRun()` -- the single predicate gate -- returns true only when
 `settings.enabled && acceptedFairPlay && context && context.safe`. It
-is checked in `tickPoll`, `setDepth`, and by the engine path in
-`onPositionChanged` (via `ctx.engineAllowed`). Book lookups are
-separately gated on `ctx.bookAllowed`.
+is checked in `tickPoll`, in `startBatchAnalysis` (alongside
+`ctx.engineAllowed`), and book lookups during the batch honour
+`ctx.bookAllowed`.
 
 Polling (every 500 ms when active):
 
 - Read current position hash.
-- On first tick: seed `turn` (to "w" for the starting position, else from
-  piece counts), seed `plyCount` (roughly `32 - total_pieces`).
+- On first tick: seed `turn` (to "w" for the starting position, else
+  from piece counts), seed `plyCount` (roughly `32 - total_pieces`).
 - On subsequent ticks, if the hash changed: flip `turn`, increment
-  `plyCount`, and call `onPositionChanged(pos)`.
+  `plyCount`, call `onPositionChanged(pos)`.
 
-`onPositionChanged(position, isFirst)` does four things:
+Note: **the poll loop no longer drives a live Stockfish analysis.**
+It exists purely so we notice the user stepping through the board
+and can serve the right cache entry.
 
-- Freezes `state.prevEval` (the already-snapshotted eval of the prior
-  position) into `state.prevRef` for use by `classifyLastMove`.
-  Both are `null` on the first position of a session.
-- Sets `lastMover` to the color that just moved (opposite of `turn`),
-  or `null` on the first position.
-- Records `state.playerColor` from `position.flipped` so the overlay can
-  flip the bar and show the `You [WHITE|BLACK]` caption.
-- Fires off an opening-book lookup (no await). The `inBook` boolean from
-  that lookup feeds into `classifyMove` so moves that lead to a position
-  in master theory can be labeled **Book move**.
-- Calls the engine (`analyze(fen, depth)`).
+`onPositionChanged(position, isFirst)`:
 
-As the engine streams `info` lines, `handleEngineInfo` stores them by
-`multipv` and calls `renderEvaluation()`, which:
+- Records `state.playerColor` from `position.flipped`.
+- Updates study-mode sync in Learn (unchanged).
+- Learn surface -> clear analysis, render the study arrow; done.
+- Analyze surface, `review.status === "ready"`:
+  - `entry = review.byHash.get(position.hash)`. If found, call
+    `paintFromCache(entry)` (which repaints eval / last-move /
+    opening pill / insight / principles / arrows) and emit the
+    status line "ply N / total".
+  - If not found, flip `review.status` to `"stale"` and show the
+    stale banner.
+- Analyze surface, `review.status === "running"`: no-op (the running
+  card owns the UI while the batch is in flight).
+- Analyze surface, `review.status === "idle"`: refresh the idle card
+  with the detected move count / result / player color.
 
-- Pushes the 3 lines + primary score + depth to the overlay.
-- Computes and sets the "assessment" label.
-- When depth reaches `max(10, desired - 3)`, snapshots the current
-  white-perspective eval into `state.prevEval`. This becomes the
-  reference for classifying the NEXT move's quality.
+`startBatchAnalysis()`:
 
-`classifyLastMove()` is called shortly after a position change using
-`state.prevEval` (captured before this position) and the fresh eval.
-The result is shown in the "Last move" row.
+1. Gate on `canRun()` and `ctx.engineAllowed`.
+2. `LaskerMoveListReader.readMoves()` + `detectResult()` +
+   `detectPlayerColor()`.
+3. `resetReviewTo("running", ...)` with a fresh `AbortController`.
+4. Paint the running card, reset timeline / summary / mistake list /
+   arrows.
+5. `await LaskerAnalyzeSession.run(...)` piping progress events into
+   `overlay.setReviewProgress`. On resolve: install the cache
+   (`state.review.plies / byHash / startHash / status=ready`),
+   rebuild tally / timeline / summary / mistake list from the
+   review, flip the overlay to `"ready"`, rewind the board via
+   `LaskerMoveListReader.goToStart()`, and kick a poll tick so the
+   first ply repaints without waiting 500 ms. On reject: drop back
+   to idle (cancelled) or idle with an error banner (failure).
 
-The classification is also pushed onto the move timeline **exactly
-once per ply** (guarded by `state.timelineSeeded`). The controller can
-be called multiple times in a tight window (snapshot branch + book
-lookup) but only the first successful classification gets a dot.
+`cancelBatchAnalysis()` -- aborts the signal. `reanalyze()` --
+clears the cache, kicks `startBatchAnalysis()` again. `jumpToPly(n)`
+-- `LaskerMoveListReader.goToPly(n)`; the poll loop handles the rest.
 
-`renderPrinciples()` walks `state.currentGrid` each time the engine
-updates and paints the three principle chips:
+`rebuildTallyFromReview` / `rebuildTimelineFromReview` /
+`pushSummaryToOverlay` / `pushMistakeListToOverlay` read from the
+full cache once at completion (and whenever the advisor scope
+changes) and push the result into the overlay in one shot.
+
+`computePrinciples()` walks `state.currentGrid` each tick and paints
+the three principle chips:
 
 - **King**: `"safe"` if on g-file or c-file of the home rank
   (castled), `"home"` if still on e-file, else `"exposed"`.
@@ -931,8 +1184,78 @@ updates and paints the three principle chips:
 - **Centre**: `"good"` if at least one of our pawns occupies
   d4/e4/d5/e5, else `"weak"`.
 
-Note: on the very first position of a session there is no `prevEval`,
-so no move-quality label is shown until after the first move.
+Principles are always computed from the live grid -- this lets the
+user get an immediate "your king is still home" read-out even on
+positions that aren't in the review cache yet.
+
+### `content/move-list-reader.js` (0.11+)
+
+Pure DOM helpers for reading the finished game's move list and
+driving chess.com's toolbar. Used by `content.js` and
+`analyze-session.js`; no state of its own.
+
+`findMoveList()` tries `wc-simple-move-list`,
+`vertical-move-list`, `.move-list-wrapper-component`,
+`.move-list-component`, and `[data-cy="move-list"]` in that order.
+
+`readMoves()` walks the leaf move nodes inside the list
+(`.node / .move / .main-line-ply / [data-ply]`), strips move numbers
+(`12.`, `12...`), NAGs (`?!`, `!`), and result markers (`1-0`,
+`1/2-1/2`), and returns a clean SAN array.
+
+`findNavButton(kind)` looks up chess.com's prev/next/first/last
+buttons by aria-label / title substring (case-insensitive). Kept
+liberal so chess.com A/B tests don't break the integration.
+
+`goToStart()` / `goToPrev()` / `goToNext()` / `goToEnd()` --
+simulate a button click; fall back to a synthetic
+`ArrowLeft` / `ArrowRight` / `Home` / `End` keyboard event on
+`document` if chess.com's button isn't in the tree.
+
+`goToPly(n, {stepMs=60})` -- click Start, then forward n times with
+a 60 ms delay between clicks. Best-effort; callers treat the
+board-poll loop as the source of truth for "did it land".
+
+`detectResult()` -- scrapes the move list, the game-over modal,
+and the header banner for `1-0 / 0-1 / 1/2-1/2` (or "white won",
+"draw" text).
+
+`detectPlayerColor()` -- prefers `LaskerBoardReader.readPosition()`'s
+flipped flag; falls back to reading `.flipped` on `<wc-chess-board>`.
+
+### `content/analyze-session.js` (0.11+)
+
+The batch runner. Exposes `window.LaskerAnalyzeSession.run(opts)`.
+
+Algorithm:
+
+1. `LaskerOpeningBook.expandLineWithFens(sans)` -> a list of
+   positions, the first of which is the starting position and the
+   rest are the positions AFTER each SAN. Each carries `{fen, grid,
+   hash, turn (side to move), lastSan, lastUci, mover}`.
+2. Spawn ONE `LaskerEngine` with `multiPv: 1` (no need for multipv
+   3 in batch). `await engine.init()`.
+3. For each position `i`:
+   - `onProgress({done: i, total, currentPly: i, currentSan})`.
+   - `await analyzePosition(engine, fen, depth, signal, timeoutMs)`.
+     This promise latches onto the highest-depth `multipv=1` info
+     line seen so far, and resolves when `bestmove` arrives.
+   - Use `LaskerLabels.toWhitePerspective` to normalise to white's
+     POV. Build `assessment` via `assessPosition`.
+   - Look up the opening name via `LaskerOpeningBook.lookup(fen)`.
+   - Classify the move that LED here against ply i-1's white-POV
+     eval (`LaskerLabels.classifyMove`). Compute `bestSan +
+     missedText` by comparing against the previous ply's best move.
+   - Store the entry in `plies[i]` and `byHash.set(hash, entry)`.
+4. On `signal.aborted` anywhere in the loop: `engine.stop()`, reject.
+5. Always `engine.terminate()` in a `finally` block.
+
+Per-ply safety timeout (default 20s) prevents a wedged worker from
+freezing the whole batch; if it fires, `analyzePosition` resolves
+with whatever depth was reached.
+
+`uciToPseudoSan(uci, grid)` is a small duplicate of the helper in
+`content.js` -- kept local so the module is self-contained.
 
 ---
 
@@ -945,7 +1268,9 @@ so no move-quality label is shown until after the first move.
     - `chrome-extension://<id>/engine/stockfish.js` (as text, for the Blob worker)
     - `chrome-extension://<id>/data/openings.json`  (the ECO DB)
 - **content <-> storage**: `chrome.storage.local["lasker.settings"] =
-  { enabled, depth, theme, size }`.
+  { enabled, depth, theme, size, collapsed, mode, advisor, width,
+    showArrows, surface }`. The review cache is in-memory only --
+  nothing is persisted per game.
 
 ---
 
@@ -972,9 +1297,17 @@ so no move-quality label is shown until after the first move.
 
 ### Usage tips
 
-- Click the **gear icon** to change theme or size.
-- Drag the **header** to reposition the panel.
-- Use the **depth slider** to trade speed vs. accuracy (8 fast, 22 deep).
+- Finish a game on chess.com, then click **Analyze this game** in
+  the overlay's idle card. LASKER runs Stockfish against every ply
+  once, rewinds the board, then serves instant cached feedback as
+  you step through with chess.com's forward/back arrows.
+- The **mistake list** in the ready state is clickable; each row
+  jumps the chess.com board to that exact ply.
+- **Batch depth** (in Settings) trades speed vs. accuracy: **Fast
+  14** (~5-10s for a typical game), **Normal 18** (~20s, default),
+  **Deep 22** (~60s+). The change applies to the next batch run.
+- Switch to **Learn** from the header segmented control for opening
+  study -- the engine stays completely off there.
 - Click the Lasker **toolbar icon** to toggle analysis without
   touching the overlay.
 

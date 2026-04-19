@@ -14,6 +14,19 @@
 (function () {
   "use strict";
 
+  // After `chrome://extensions` → Reload, existing tabs keep running their
+  // old content scripts; `chrome.runtime.getURL` then throws "Extension
+  // context invalidated." Callers should stop polling and ask the user to
+  // refresh the chess.com tab.
+  function extensionContextAlive() {
+    try {
+      chrome.runtime.getURL("/");
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+
   function parseInfoLine(line) {
     // Parses a Stockfish "info ..." line into a structured object.
     // We only care about depth, multipv, score (cp/mate), and pv.
@@ -88,6 +101,13 @@
     // chrome-extension URL in the hash -- that fetch works fine from a blob:
     // Worker because the wasm is also web-accessible.
     async _initAsync() {
+      if (!extensionContextAlive()) {
+        const err = new Error(
+          "Extension context invalidated. Reload this chess.com tab after updating LASKER."
+        );
+        if (this.onError) this.onError(err);
+        throw err;
+      }
       const jsUrl = chrome.runtime.getURL("engine/stockfish.js");
       const wasmUrl = chrome.runtime.getURL("engine/stockfish.wasm");
 
@@ -207,4 +227,5 @@
 
   window.LaskerEngine = LaskerEngine;
   window.LaskerParseInfo = parseInfoLine;
+  window.LaskerExtensionContext = { alive: extensionContextAlive };
 })();

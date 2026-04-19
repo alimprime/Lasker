@@ -182,6 +182,12 @@
     return catalogPromise;
   }
 
+  function enemyOccupies(grid, isWhite, tf, tr) {
+    const c = grid[tr][tf];
+    if (!c) return false;
+    return isWhite ? c === c.toLowerCase() : c === c.toUpperCase();
+  }
+
   // -------------------------------------------------------------------------
   // Minimal SAN -> UCI converter. We only need it for the curated catalog's
   // opening moves, which are always unambiguous or use standard disambiguation.
@@ -259,7 +265,39 @@
         candidates.push({ f, r });
       }
     }
-    if (candidates.length === 0) return null;
+
+    // chess.com sometimes emits capture-only tokens like "xd5". Geometric reachability
+    // alone is wrong for pieces that could also "slide" onto an empty square — require
+    // an enemy on the destination so we only consider real captures.
+    const ambiguousShortCapture = /^x[a-h][1-8]$/i.test(stripped);
+    if (candidates.length === 0 && ambiguousShortCapture && enemyOccupies(grid, isWhite, tFile, tRank)) {
+      const strict = [];
+      for (const pl of ["P", "N", "B", "R", "Q", "K"]) {
+        const wc = isWhite ? pl : pl.toLowerCase();
+        for (let r = 0; r < 8; r++) {
+          for (let f = 0; f < 8; f++) {
+            if (grid[r][f] !== wc) continue;
+            if (!canMoveGeometric(grid, pl, isWhite, f, r, tFile, tRank, true)) continue;
+            strict.push({ f, r });
+          }
+        }
+      }
+      if (strict.length === 1) {
+        candidates.push(strict[0]);
+      } else if (strict.length > 1) {
+        const pawnCaps = strict.filter(({ f, r }) => {
+          const ch = grid[r][f];
+          return ch === (isWhite ? "P" : "p");
+        });
+        if (pawnCaps.length === 1) {
+          candidates.push(pawnCaps[0]);
+        }
+      }
+    }
+
+    if (candidates.length === 0) {
+      return null;
+    }
     // Prefer the first match. If multiple match and no disambiguation was
     // provided, prefer the one that isn't pinned (approximate: favour
     // the first candidate -- catalog curator has already picked unambiguous
@@ -424,6 +462,126 @@
     return { startHash: gridHash(startingGrid()), line: out };
   }
 
+  // -------------------------------------------------------------------------
+  // 0.11.0: FEN-producing line expander used by the batch Analyze runner.
+  // Same contract as expandLine but each ply ALSO carries:
+  //   - `fen`      -- Stockfish-ready FEN of the position AFTER this ply
+  //   - `grid`     -- 8x8 grid AFTER this ply (consumed by classify, for
+  //                   uci->SAN conversion etc.)
+  // The returned object also has `startFen` and `startGrid` for ply 0.
+  //
+  // Castling rights are inferred from king/rook positions at each step
+  // (same heuristic as board-reader's toFen); en-passant is always "-"
+  // which is a minor approximation that very rarely affects batch eval.
+  // Half-move / full-move clocks are zeroed.
+  // -------------------------------------------------------------------------
+  function gridToBoardFen(grid) {
+    const rows = [];
+    for (let rank = 7; rank >= 0; rank--) {
+      let row = "";
+      let empties = 0;
+      for (let file = 0; file < 8; file++) {
+        const p = grid[rank][file];
+        if (p) {
+          if (empties > 0) { row += empties; empties = 0; }
+          row += p;
+        } else {
+          empties++;
+        }
+      }
+      if (empties > 0) row += empties;
+      rows.push(row);
+    }
+    return rows.join("/");
+  }
+  function inferCastling(grid) {
+    let rights = "";
+    if (grid[0][4] === "K") {
+      if (grid[0][7] === "R") rights += "K";
+      if (grid[0][0] === "R") rights += "Q";
+    }
+    if (grid[7][4] === "k") {
+      if (grid[7][7] === "r") rights += "k";
+      if (grid[7][0] === "r") rights += "q";
+    }
+    return rights || "-";
+  }
+  function composeFen(grid, turn) {
+    return `${gridToBoardFen(grid)} ${turn} ${inferCastling(grid)} - 0 1`;
+  }
+
+  function expandLineWithFens(sanList) {
+    const startGrid = startingGrid();
+    const startFen = composeFen(startGrid, "w");
+    const startHash = gridHash(startGrid);
+    if (!Array.isArray(sanList)) {
+      return {
+        startFen,
+        startGrid,
+        startHash,
+        line: [],
+        replayMeta: {
+          inputSans: 0,
+          replayedMoves: 0,
+          stopped: false,
+          stopReason: null,
+          stopIndex: null,
+          stopSan: null,
+        },
+      };
+    }
+    let grid = startGrid.map((row) => row.slice());
+    let turn = "w";
+    const out = [];
+    let stopReason = null;
+    let stopIndex = null;
+    let stopSan = null;
+    for (let i = 0; i < sanList.length; i++) {
+      const san = sanList[i];
+      const uci = sanToUci(grid, turn, san);
+      if (!uci) {
+        stopReason = "sanToUci_failed";
+        stopIndex = i;
+        stopSan = san;
+        break;
+      }
+      const next = applyUci(grid, uci);
+      if (!next) {
+        stopReason = "applyUci_failed";
+        stopIndex = i;
+        stopSan = san;
+        break;
+      }
+      grid = next;
+      const nextTurn = turn === "w" ? "b" : "w";
+      out.push({
+        ply: i,
+        san,
+        uci,
+        turn,                         // side that played this ply
+        grid: grid.map((row) => row.slice()),
+        hash: gridHash(grid),
+        fen: composeFen(grid, nextTurn),
+      });
+      turn = nextTurn;
+    }
+    const stopped = stopReason != null;
+    return {
+      startFen,
+      startGrid,
+      startHash,
+      line: out,
+      replayMeta: {
+        inputSans: sanList.length,
+        replayedMoves: out.length,
+        stopped,
+        stopReason,
+        stopIndex,
+        stopSan,
+      },
+    };
+  }
+
   window.LaskerOpeningBook = {
     lookup,
     isEarly,
@@ -433,5 +591,6 @@
     startingGrid,
     gridHash,
     expandLine,
+    expandLineWithFens,
   };
 })();

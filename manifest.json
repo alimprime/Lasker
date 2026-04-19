@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "LASKER",
-  "version": "0.10.0",
-  "description": "LASKER: fair-play chess coach for chess.com. Two surfaces that don't overlap: Analyze (engine review with slim opening pill, a single best-move arrow that ONLY ever points for the student's own side, a last-move card that also shows the engine's preferred move and the missed eval, and a session summary with accuracy + move-quality counts) and Learn (curated Opening Library + directive Study mode with takeback-safe position-hash sync, engine fully off). Clean-state button wipes timeline/study/engine cache in one click. Drawer leaves a 140px strip at the bottom of the viewport so chess.com's move-nav controls stay clickable. Bundled Space Grotesk typeface. Automatically disabled on live/daily games, puzzles, and anywhere else real play happens.",
+  "version": "0.11.4",
+  "description": "LASKER: fair-play chess coach for chess.com. Two surfaces that don't overlap: Analyze (one-click post-game batch review -- LASKER reads the finished game's move list, runs Stockfish ply-by-ply once, caches the full per-ply review in memory, rewinds to the start, then serves instant cached feedback as you step through the board; includes a clickable mistake list that jumps the chess.com board to that ply) and Learn (curated Opening Library + directive Study mode with takeback-safe position-hash sync, engine fully off). Clean-state button wipes the review cache, timeline, study and engine in one click. Drawer leaves a 140px strip at the bottom of the viewport so chess.com's move-nav controls stay clickable. Bundled Space Grotesk typeface. Automatically disabled on live/daily games, puzzles, and anywhere else real play happens.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -33,7 +33,9 @@
         "content/opening-book.js",
         "content/engine-hints.js",
         "content/board-arrows.js",
+        "content/move-list-reader.js",
         "engine/stockfish-worker.js",
+        "content/analyze-session.js",
         "content/overlay.js",
         "content/content.js"
       ],

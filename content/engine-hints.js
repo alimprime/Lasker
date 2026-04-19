@@ -205,5 +205,58 @@
     return s[0].toUpperCase() + s.slice(1);
   }
 
-  window.LaskerEngineHints = { describeMove };
+  /** Short idea for the suggested move (no eval sentence). */
+  function thematicLine(san) {
+    if (!san) return "";
+    const piece = pieceFromSan(san);
+    const target = targetSquare(san);
+    const action = actionClause(san, piece, target);
+    const themes = thematicClause(san, piece, target);
+    const t = themes.length ? ` (${themes.slice(0, 2).join("; ")})` : "";
+    return `${capitalise(action)}${t}.`;
+  }
+
+  /**
+   * Short habit paragraph — generic teaching, not position-specific.
+   * Optional `moverDeltaCp` (centipawns, negative = worse for mover) nudges emphasis.
+   */
+  function severityTheory(severity, opts) {
+    const d = opts && opts.moverDeltaCp != null ? opts.moverDeltaCp : null;
+    const brutal = d != null && d <= -300;
+    const heavy = d != null && d <= -150;
+
+    if (severity === "blunder") {
+      if (brutal) {
+        return (
+          "When the eval collapses like this, assume a one-move tactic: check, capture, threat, or mate. "
+          + "Pause before you release the piece — scan forcing replies in order."
+        );
+      }
+      return (
+        "Blunders are usually cheap tactics: a loose piece, a missed capture, walking into mate, or an unsafe king. "
+        + "Before you move, quickly run checks, captures, and threats — especially your opponent’s most forcing replies."
+      );
+    }
+    if (severity === "mistake") {
+      if (heavy) {
+        return (
+          "Big drops often mean the move looked natural but walked into pressure or wasted a critical tempo. "
+          + "Ask what your opponent threatens next, and whether your idea has a concrete point."
+        );
+      }
+      return (
+        "Mistakes are often plan slips: the idea feels right but improves your opponent’s pieces or ignores a tactic. "
+        + "Double-check loose defenders and weak squares before committing."
+      );
+    }
+    if (severity === "inaccuracy") {
+      return (
+        "Small slips add up: a slower square, the second-best plan, or a minor positional concession. "
+        + "Compare your move with one that improves an active piece or patches a weakness you left behind."
+      );
+    }
+    return "";
+  }
+
+  window.LaskerEngineHints = { describeMove, thematicLine, severityTheory };
 })();
