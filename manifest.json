@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Lasker",
-  "version": "0.4.0",
-  "description": "Live Stockfish analysis overlay for chess.com with human-readable labels, offline opening theory (7.6k named positions, depth-5+ continuations), Stockfish move advice in plain English, and Wikipedia/Lichess read-more links.",
+  "name": "LASKER",
+  "version": "0.10.0",
+  "description": "LASKER: fair-play chess coach for chess.com. Two surfaces that don't overlap: Analyze (engine review with slim opening pill, a single best-move arrow that ONLY ever points for the student's own side, a last-move card that also shows the engine's preferred move and the missed eval, and a session summary with accuracy + move-quality counts) and Learn (curated Opening Library + directive Study mode with takeback-safe position-hash sync, engine fully off). Clean-state button wipes timeline/study/engine cache in one click. Drawer leaves a 140px strip at the bottom of the viewport so chess.com's move-nav controls stay clickable. Bundled Space Grotesk typeface. Automatically disabled on live/daily games, puzzles, and anywhere else real play happens.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "Lasker",
+    "default_title": "LASKER",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -27,10 +27,12 @@
     {
       "matches": ["https://www.chess.com/*"],
       "js": [
+        "content/fair-play.js",
         "content/board-reader.js",
         "content/analysis-labels.js",
         "content/opening-book.js",
         "content/engine-hints.js",
+        "content/board-arrows.js",
         "engine/stockfish-worker.js",
         "content/overlay.js",
         "content/content.js"
@@ -44,7 +46,12 @@
       "resources": [
         "engine/stockfish.js",
         "engine/stockfish.wasm",
-        "data/openings.json"
+        "data/openings.json",
+        "data/opening-catalog.json",
+        "fonts/SpaceGrotesk-Regular.woff2",
+        "fonts/SpaceGrotesk-Medium.woff2",
+        "fonts/SpaceGrotesk-SemiBold.woff2",
+        "fonts/SpaceGrotesk-Bold.woff2"
       ],
       "matches": ["https://www.chess.com/*"]
     }

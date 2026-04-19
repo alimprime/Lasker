@@ -1,0 +1,247 @@
+{
+  "version": 1,
+  "note": "Hand-curated Opening Library for the Lasker picker. Categories are grouped by the side the user plans to play; each entry lists the first 4-6 theory plies in SAN along with a short beginner-friendly blurb. The directive 'Study this' mode walks the user through `moves` one ply at a time.",
+  "categories": [
+    {
+      "id": "white-e4",
+      "label": "Play as White — 1.e4",
+      "blurb": "Open, classical king-pawn systems. Fast development, easy to understand.",
+      "side": "w",
+      "openings": [
+        {
+          "id": "italian",
+          "name": "Italian Game",
+          "eco": "C50",
+          "side": "w",
+          "moves": ["e4", "e5", "Nf3", "Nc6", "Bc4"],
+          "tags": ["classical", "beginner"],
+          "blurb": "Points the bishop at f7 and gets pieces out fast. The textbook first opening.",
+          "why": "You'll practice every opening principle in one game: centre pawn, knight, bishop, castle, connect rooks.",
+          "wikiSlug": "Italian_Game"
+        },
+        {
+          "id": "ruy-lopez",
+          "name": "Ruy Lopez (Spanish)",
+          "eco": "C60",
+          "side": "w",
+          "moves": ["e4", "e5", "Nf3", "Nc6", "Bb5"],
+          "tags": ["classical", "strategic"],
+          "blurb": "Pins the knight defending e5 and fights for the long-term initiative.",
+          "why": "Deep strategy but easy to start — the most-played 1.e4 reply at master level.",
+          "wikiSlug": "Ruy_Lopez"
+        },
+        {
+          "id": "scotch",
+          "name": "Scotch Game",
+          "eco": "C45",
+          "side": "w",
+          "moves": ["e4", "e5", "Nf3", "Nc6", "d4"],
+          "tags": ["open", "aggressive"],
+          "blurb": "Immediately cracks open the centre with 3.d4 and trades for fast piece play.",
+          "why": "You get an open position with clear plans; no endless theory memorisation.",
+          "wikiSlug": "Scotch_Game"
+        },
+        {
+          "id": "vienna",
+          "name": "Vienna Game",
+          "eco": "C25",
+          "side": "w",
+          "moves": ["e4", "e5", "Nc3"],
+          "tags": ["tricky", "tactical"],
+          "blurb": "Flexible knight move. Often mutates into a King's Gambit setup with f4.",
+          "why": "Avoids the mainline Spanish/Italian theory and creates sharp tactical chances.",
+          "wikiSlug": "Vienna_Game"
+        },
+        {
+          "id": "kings-gambit",
+          "name": "King's Gambit",
+          "eco": "C30",
+          "side": "w",
+          "moves": ["e4", "e5", "f4"],
+          "tags": ["gambit", "attacking"],
+          "blurb": "Sacrifices a pawn for open lines and a direct kingside attack.",
+          "why": "Romantic-era attacking chess. Fun for learning initiative and piece activity.",
+          "wikiSlug": "King%27s_Gambit"
+        }
+      ]
+    },
+    {
+      "id": "white-d4",
+      "label": "Play as White — 1.d4",
+      "blurb": "Positional queen-pawn systems. Slower, space-based plans, less forcing.",
+      "side": "w",
+      "openings": [
+        {
+          "id": "queens-gambit",
+          "name": "Queen's Gambit",
+          "eco": "D20",
+          "side": "w",
+          "moves": ["d4", "d5", "c4"],
+          "tags": ["classical", "strategic"],
+          "blurb": "Offers a c-pawn to divert Black's d-pawn and build a mobile centre.",
+          "why": "Easy plans on both sides. Famous from the Netflix series — and for good reason.",
+          "wikiSlug": "Queen%27s_Gambit"
+        },
+        {
+          "id": "london",
+          "name": "London System",
+          "eco": "D02",
+          "side": "w",
+          "moves": ["d4", "d5", "Nf3", "Nf6", "Bf4"],
+          "tags": ["system", "beginner"],
+          "blurb": "Deploys the same setup vs almost anything Black plays — low-memorisation.",
+          "why": "You rehearse ONE setup and learn the plans deeply. Great if you hate theory.",
+          "wikiSlug": "London_System"
+        },
+        {
+          "id": "catalan",
+          "name": "Catalan Opening",
+          "eco": "E00",
+          "side": "w",
+          "moves": ["d4", "Nf6", "c4", "e6", "g3"],
+          "tags": ["strategic", "fianchetto"],
+          "blurb": "Fianchettoed bishop on g2 aims at Black's queenside through a half-open long diagonal.",
+          "why": "Elegant, strategic, rich in long-term pressure. Teaches patience.",
+          "wikiSlug": "Catalan_Opening"
+        },
+        {
+          "id": "english",
+          "name": "English Opening",
+          "eco": "A10",
+          "side": "w",
+          "moves": ["c4"],
+          "tags": ["flexible", "positional"],
+          "blurb": "Claims queenside space first. Often transposes to a reversed Sicilian.",
+          "why": "Flexible move order — you can steer into calm or sharp positions at will.",
+          "wikiSlug": "English_Opening"
+        }
+      ]
+    },
+    {
+      "id": "black-vs-e4",
+      "label": "Play as Black — vs 1.e4",
+      "blurb": "What to play when White opens with the king's pawn.",
+      "side": "b",
+      "openings": [
+        {
+          "id": "sicilian-najdorf",
+          "name": "Sicilian Defense: Najdorf",
+          "eco": "B90",
+          "side": "b",
+          "moves": ["e4", "c5", "Nf3", "d6", "d4", "cxd4", "Nxd4", "Nf6", "Nc3", "a6"],
+          "tags": ["sharp", "combative"],
+          "blurb": "The fighting reply. Asymmetry from move one; you play for the win.",
+          "why": "Top-level theory but the plans (…b5, …e5, queenside expansion) are very teachable.",
+          "wikiSlug": "Sicilian_Defence%2C_Najdorf_Variation"
+        },
+        {
+          "id": "french",
+          "name": "French Defense",
+          "eco": "C10",
+          "side": "b",
+          "moves": ["e4", "e6", "d4", "d5"],
+          "tags": ["strategic", "solid"],
+          "blurb": "Challenges the centre and builds a sturdy pawn chain.",
+          "why": "Clear plans on the queenside and c-file. A reliable lifetime weapon.",
+          "wikiSlug": "French_Defence"
+        },
+        {
+          "id": "caro-kann",
+          "name": "Caro-Kann Defense",
+          "eco": "B10",
+          "side": "b",
+          "moves": ["e4", "c6", "d4", "d5"],
+          "tags": ["solid", "endgame"],
+          "blurb": "Supports …d5 without locking in the light-square bishop.",
+          "why": "Ultra-solid. You rarely get crushed and often enter pleasant endgames.",
+          "wikiSlug": "Caro%E2%80%93Kann_Defence"
+        },
+        {
+          "id": "scandinavian",
+          "name": "Scandinavian Defense",
+          "eco": "B01",
+          "side": "b",
+          "moves": ["e4", "d5"],
+          "tags": ["simple", "direct"],
+          "blurb": "Hits e4 immediately and invites early trades.",
+          "why": "Avoids huge theory. You can play a handful of move orders against nearly anything.",
+          "wikiSlug": "Scandinavian_Defence"
+        },
+        {
+          "id": "petrov",
+          "name": "Petrov Defense",
+          "eco": "C42",
+          "side": "b",
+          "moves": ["e4", "e5", "Nf3", "Nf6"],
+          "tags": ["drawish", "symmetric"],
+          "blurb": "Mirrors White's knight move and fights for symmetry.",
+          "why": "Famously solid. Good when you want a calm, equal position.",
+          "wikiSlug": "Petrov%27s_Defence"
+        }
+      ]
+    },
+    {
+      "id": "black-vs-d4",
+      "label": "Play as Black — vs 1.d4",
+      "blurb": "What to play when White opens with the queen's pawn.",
+      "side": "b",
+      "openings": [
+        {
+          "id": "kings-indian",
+          "name": "King's Indian Defense",
+          "eco": "E60",
+          "side": "b",
+          "moves": ["d4", "Nf6", "c4", "g6", "Nc3", "Bg7", "e4", "d6"],
+          "tags": ["hypermodern", "attacking"],
+          "blurb": "Lets White grab the centre, then attacks it with pieces and pawn storms.",
+          "why": "The classic attacking weapon vs 1.d4. Rich in kingside pawn storms (…f5, …f4, …g5).",
+          "wikiSlug": "King%27s_Indian_Defence"
+        },
+        {
+          "id": "qgd",
+          "name": "Queen's Gambit Declined",
+          "eco": "D30",
+          "side": "b",
+          "moves": ["d4", "d5", "c4", "e6"],
+          "tags": ["classical", "solid"],
+          "blurb": "Declines the pawn and holds the classical centre with …e6 and …Nf6.",
+          "why": "Rock-solid, principled chess. Teaches you the minority attack and central breaks.",
+          "wikiSlug": "Queen%27s_Gambit_Declined"
+        },
+        {
+          "id": "nimzo-indian",
+          "name": "Nimzo-Indian Defense",
+          "eco": "E20",
+          "side": "b",
+          "moves": ["d4", "Nf6", "c4", "e6", "Nc3", "Bb4"],
+          "tags": ["strategic", "positional"],
+          "blurb": "Pins the c3-knight and aims to damage White's pawn structure.",
+          "why": "A positional masterclass — bishop pair vs doubled pawns, weak squares, prophylaxis.",
+          "wikiSlug": "Nimzo-Indian_Defence"
+        },
+        {
+          "id": "slav",
+          "name": "Slav Defense",
+          "eco": "D10",
+          "side": "b",
+          "moves": ["d4", "d5", "c4", "c6"],
+          "tags": ["solid", "strategic"],
+          "blurb": "Defends d5 with …c6, keeping the light-square bishop free.",
+          "why": "Very safe, lots of endgame play. Beloved by world champions.",
+          "wikiSlug": "Slav_Defence"
+        },
+        {
+          "id": "dutch",
+          "name": "Dutch Defense",
+          "eco": "A80",
+          "side": "b",
+          "moves": ["d4", "f5"],
+          "tags": ["sharp", "kingside"],
+          "blurb": "Stakes a claim on the kingside dark squares with …f5.",
+          "why": "Imbalanced right from move 1. Great practice for unbalanced attacking play.",
+          "wikiSlug": "Dutch_Defence"
+        }
+      ]
+    }
+  ]
+}
