@@ -34,6 +34,7 @@
     engine: null,
     pollHandle: null,
     currentFen: null,
+    currentGrid: null,       // 8x8 grid of piece chars for the position we're analysing
     currentLines: { 1: null, 2: null, 3: null },
     currentDepth: 0,
     prevEval: null,          // { whiteCp, whiteMate } -- current position's eval, snapshotted once deep enough
@@ -120,6 +121,8 @@
     });
     window.ChessMateOverlay.setAssessment(assess);
 
+    renderEngineHint();
+
     // Once the engine has reached a decent depth on THIS position, snapshot
     // its white-perspective eval as the reference for the NEXT move's quality.
     if (!state.labelSnapshotted && state.currentDepth >= Math.max(10, state.settings.depth - 3)) {
@@ -160,6 +163,65 @@
     window.ChessMateOverlay.setLastMove(result);
   }
 
+  // ---------------------------------------------------------------------------
+  // Engine hint: turn Stockfish's top move into a short human sentence.
+  // The PV we get from stockfish is in UCI ("e2e4"); we convert to a very
+  // simple SAN-ish string using the live grid so hint phrasing can reason
+  // about piece type, castling, captures, and centre squares. For ambiguous
+  // piece moves we don't bother with disambiguation -- the hint is
+  // descriptive, not a substitute for the PV line itself.
+  function uciToPseudoSan(uci, grid) {
+    if (!uci || uci.length < 4 || !grid) return null;
+    const from = uci.slice(0, 2);
+    const to = uci.slice(2, 4);
+    const promo = uci.slice(4, 5);
+
+    const fFile = from.charCodeAt(0) - 97;     // a=0..h=7
+    const fRank = parseInt(from[1], 10) - 1;   // 1=0..8=7
+    const tFile = to.charCodeAt(0) - 97;
+    const tRank = parseInt(to[1], 10) - 1;
+    if (fFile < 0 || fFile > 7 || fRank < 0 || fRank > 7) return null;
+
+    const piece = grid[fRank] && grid[fRank][fFile];
+    if (!piece) return null;
+
+    const target = grid[tRank] && grid[tRank][tFile];
+    const isCapture = !!target;
+    const pieceUpper = piece.toUpperCase();
+
+    if (pieceUpper === "K" && Math.abs(tFile - fFile) === 2) {
+      return tFile === 6 ? "O-O" : "O-O-O";
+    }
+    if (pieceUpper === "P") {
+      const capStr = isCapture ? `${from[0]}x` : "";
+      const promoStr = promo ? `=${promo.toUpperCase()}` : "";
+      return `${capStr}${to}${promoStr}`;
+    }
+    return `${pieceUpper}${isCapture ? "x" : ""}${to}`;
+  }
+
+  function renderEngineHint() {
+    const primary = state.currentLines[1];
+    if (!primary || !primary.pv || primary.pv.length === 0) {
+      window.ChessMateOverlay.setEngineHint(null);
+      return;
+    }
+    const uci = primary.pv[0];
+    const san = uciToPseudoSan(uci, state.currentGrid);
+    if (!san) {
+      window.ChessMateOverlay.setEngineHint(null);
+      return;
+    }
+    const text = window.ChessMateEngineHints.describeMove({
+      san,
+      mover: state.turn,
+      currScoreCp: primary.scoreCp,
+      currScoreMate: primary.scoreMate,
+      inBook: state.inBookNow,
+    });
+    window.ChessMateOverlay.setEngineHint({ text, source: "stockfish" });
+  }
+
   function initTurnFor(position) {
     if (position.isStartPos) { state.turn = "w"; state.plyCount = 0; return; }
     state.turn = position.naiveTurn;
@@ -177,7 +239,10 @@
     const requestedFen = fen;
     const op = await window.ChessMateOpeningBook.lookup(fen);
     if (state.currentFen !== requestedFen) return;
-    window.ChessMateOverlay.setOpening(op);
+    // Hand the FEN back to the overlay so it can build a "Study on Lichess"
+    // deep-link for the exact current position.
+    const enriched = op ? { ...op, fen } : null;
+    window.ChessMateOverlay.setOpening(enriched);
     state.inBookNow = !!(op && op.name);
     // The move's "Book" classification depends on whether the NEW position is
     // in theory; re-classify with the fresh flag.
@@ -199,6 +264,7 @@
 
     const fen = window.ChessMateBoardReader.toFen(position, state.turn);
     state.currentFen = fen;
+    state.currentGrid = position.grid || null;
     log("analyzing", fen);
     window.ChessMateOverlay.setStatus("thinking...");
 

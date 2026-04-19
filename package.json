@@ -4,7 +4,8 @@
   "description": "",
   "main": "background.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:openings": "node scripts/build-openings.mjs"
   },
   "repository": {
     "type": "git",
@@ -19,5 +20,8 @@
   "homepage": "https://github.com/alimprime/ChessMate#readme",
   "dependencies": {
     "stockfish": "^18.0.7"
+  },
+  "devDependencies": {
+    "chess.js": "^1.4.0"
   }
 }

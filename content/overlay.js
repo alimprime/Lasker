@@ -9,7 +9,8 @@
 //   setStatus(text)
 //   setAssessment({label, severity})
 //   setLastMove({label, badge, severity, detail})
-//   setOpening({name, eco, moves})
+//   setOpening({name, eco, moves, fen})
+//   setEngineHint({text, source})
 //   setEvaluation({scoreCp, scoreMate, depth, lines, turn, playerColor})
 //   setDepth(n)
 //   setTheme("dark"|"light")
@@ -200,7 +201,7 @@
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .assessment.hidden, .last-move.hidden, .opening.hidden, .player-tip.hidden { display: none; }
+    .assessment.hidden, .last-move.hidden, .opening.hidden, .player-tip.hidden, .engine-hint.hidden { display: none; }
 
     .last-move {
       font-size: calc(var(--fs));
@@ -305,17 +306,80 @@
     }
     .opening .op-moves {
       display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 180px;
+      overflow-y: auto;
     }
-    .opening .op-move {
+    .opening .op-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 3px 2px;
+      border-radius: 4px;
+    }
+    .opening .op-row:hover { background: var(--hover); }
+    .opening .op-san {
       font-family: "SF Mono", Menlo, Consolas, monospace;
       font-size: calc(var(--fs) - 1px);
       background: var(--hover);
       color: var(--fg);
-      padding: 3px 9px;
+      padding: 2px 7px;
       border-radius: 4px;
       border: 1px solid var(--border);
+      font-weight: 700;
+      min-width: 42px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .opening .op-child-name {
+      font-size: calc(var(--fs) - 2px);
+      color: var(--fg);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      min-width: 0;
+    }
+    .opening .op-child-eco {
+      font-size: calc(var(--fs) - 3px);
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .opening .op-links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: calc(var(--fs) - 3px);
+      margin-top: 2px;
+    }
+    .opening .op-links a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px dotted var(--accent);
+    }
+    .opening .op-links a:hover { opacity: 0.8; }
+    .opening .op-links.hidden { display: none; }
+
+    .engine-hint {
+      padding: 10px 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: var(--bg-3);
+    }
+    .engine-hint .eh-caption {
+      font-size: calc(var(--fs) - 3px);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .engine-hint .eh-text {
+      font-size: calc(var(--fs));
+      line-height: 1.4;
+      color: var(--fg);
     }
 
     .lines {
@@ -514,8 +578,16 @@
             <span class="op-name"></span>
             <span class="op-eco"></span>
           </div>
+          <div class="op-links hidden">
+            <a class="op-wiki" target="_blank" rel="noopener noreferrer">Read on Wikipedia</a>
+            <a class="op-lichess" target="_blank" rel="noopener noreferrer">Study on Lichess</a>
+          </div>
           <div class="op-caption">Theory moves</div>
           <div class="op-moves"></div>
+        </div>
+        <div class="engine-hint hidden">
+          <div class="eh-caption">Stockfish suggests</div>
+          <div class="eh-text"></div>
         </div>
         <div class="lines">
           <div class="caption">Top engine lines</div>
@@ -568,6 +640,11 @@
       this.elements.opName = q(".op-name");
       this.elements.opEco = q(".op-eco");
       this.elements.opMoves = q(".op-moves");
+      this.elements.opLinks = q(".op-links");
+      this.elements.opWiki = q(".op-wiki");
+      this.elements.opLichess = q(".op-lichess");
+      this.elements.engineHint = q(".engine-hint");
+      this.elements.engineHintText = q(".eh-text");
       this.elements.lines = [
         q('[data-line="1"]'),
         q('[data-line="2"]'),
@@ -752,24 +829,107 @@
     setOpening(op) {
       const el = this.elements.opening;
       if (!el) return;
-      if (!op || !op.name) {
+      const moves = (op && op.moves) || [];
+      if (!op || (!op.name && moves.length === 0)) {
         el.classList.add("hidden");
         return;
       }
       el.classList.remove("hidden");
-      this.elements.opName.textContent = op.name;
+
+      const hasName = !!op.name;
+      this.elements.opName.textContent = op.name || "Opening phase";
+      this.elements.opName.style.fontStyle = hasName ? "" : "italic";
       this.elements.opEco.textContent = op.eco || "";
       this.elements.opEco.style.display = op.eco ? "" : "none";
 
+      this._updateOpeningLinks(op);
+
       this.elements.opMoves.innerHTML = "";
-      const top = (op.moves || []).slice(0, 5);
-      for (const m of top) {
-        const span = document.createElement("span");
-        span.className = "op-move";
-        span.textContent = m.san;
-        span.title = `${m.total.toLocaleString()} master games`;
-        this.elements.opMoves.appendChild(span);
+
+      if (moves.length === 0) {
+        const row = document.createElement("div");
+        row.className = "op-child-name";
+        row.style.fontStyle = "italic";
+        row.style.color = "var(--muted)";
+        row.textContent = "No named continuations in theory from here.";
+        this.elements.opMoves.appendChild(row);
+        return;
       }
+
+      const MAX = 12;
+      const top = moves.slice(0, MAX);
+      for (const m of top) {
+        const row = document.createElement("div");
+        row.className = "op-row";
+        row.innerHTML = `
+          <span class="op-san"></span>
+          <span class="op-child-name"></span>
+          <span class="op-child-eco"></span>
+        `;
+        row.querySelector(".op-san").textContent = m.san;
+        row.querySelector(".op-child-name").textContent = m.name || "";
+        row.querySelector(".op-child-eco").textContent = m.eco || "";
+        if (m.name) row.title = `${m.san} -> ${m.eco ? m.eco + " " : ""}${m.name}`;
+        this.elements.opMoves.appendChild(row);
+      }
+    }
+
+    _updateOpeningLinks(op) {
+      const linksEl = this.elements.opLinks;
+      if (!linksEl) return;
+
+      const wikiUrl = this._wikipediaUrl(op && op.name);
+      const lichessUrl = this._lichessAnalysisUrl(op && op.fen);
+
+      if (!wikiUrl && !lichessUrl) {
+        linksEl.classList.add("hidden");
+        return;
+      }
+      linksEl.classList.remove("hidden");
+
+      if (wikiUrl) {
+        this.elements.opWiki.href = wikiUrl;
+        this.elements.opWiki.style.display = "";
+      } else {
+        this.elements.opWiki.style.display = "none";
+      }
+
+      if (lichessUrl) {
+        this.elements.opLichess.href = lichessUrl;
+        this.elements.opLichess.style.display = "";
+      } else {
+        this.elements.opLichess.style.display = "none";
+      }
+    }
+
+    // Wikipedia's "Go" endpoint: if the exact page exists it redirects
+    // straight there, otherwise it shows the search results. Works for any
+    // opening name without us hard-coding URL slugs.
+    _wikipediaUrl(name) {
+      if (!name) return null;
+      // Strip variation suffix after ":" so we link to the parent article.
+      const base = name.split(":")[0].trim();
+      if (!base) return null;
+      const q = encodeURIComponent(`${base} chess`);
+      return `https://en.wikipedia.org/w/index.php?title=Special:Search&go=Go&search=${q}`;
+    }
+
+    _lichessAnalysisUrl(fen) {
+      if (!fen) return null;
+      // Lichess expects underscores in place of spaces in its analysis URL.
+      const safe = fen.replace(/\s+/g, "_");
+      return `https://lichess.org/analysis/standard/${safe}`;
+    }
+
+    setEngineHint(hint) {
+      const el = this.elements.engineHint;
+      if (!el) return;
+      if (!hint || !hint.text) {
+        el.classList.add("hidden");
+        return;
+      }
+      el.classList.remove("hidden");
+      this.elements.engineHintText.textContent = hint.text;
     }
 
     clearAnalysis() {
@@ -781,6 +941,7 @@
       this.setAssessment(null);
       this.setLastMove(null);
       this.setOpening(null);
+      this.setEngineHint(null);
       for (let i = 0; i < 3; i++) {
         const el = this.elements.lines[i];
         el.className = "line empty";

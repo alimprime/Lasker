@@ -5,7 +5,7 @@ what ChessMate is, how it's built, where every piece lives, how to run it,
 and the known limitations and next steps. Keep it up to date when you
 change the architecture.
 
-Current version: **0.2.1**
+Current version: **0.4.0**
 
 ---
 
@@ -16,14 +16,21 @@ position evaluation overlay to **chess.com**. When enabled, it:
 
 - Reads the current board state from the chess.com page DOM
 - Runs Stockfish 18 (WebAssembly) locally in the user's browser
-- Queries the Lichess Opening Explorer for theory names and popular moves
+- Looks up opening names and named continuations in a bundled offline
+  database built from the `lichess-org/chess-openings` dataset. The
+  builder walks the full PGN of every one of the 3690 upstream entries,
+  yielding **7601 named positions** and **5290 parent positions with
+  7789 continuation pointers** -- enough depth for every mainline ply
+  through at least move 10.
+- Turns Stockfish's top move into a human-readable hint
+  ("Play Nf3 - natural developing square; fights for the centre.
+  Holds a small plus (+0.32).")
+- Offers "Read on Wikipedia" and "Study on Lichess" deep-links for the
+  current opening / position.
 - Displays everything in a small floating panel injected into the page
 
-All engine analysis is done **locally**. The only network call is to
-`explorer.lichess.ovh` for opening theory (public, free, no auth).
-That fetch is proxied through the extension's background service
-worker because Lichess sometimes 401s requests coming from the
-`https://www.chess.com` origin. No account, no API keys, no telemetry.
+The extension is **fully offline**: no network calls at runtime, no
+external APIs, no account, no API keys, no telemetry.
 
 ### What the overlay shows (top to bottom)
 
@@ -42,13 +49,24 @@ worker because Lichess sometimes 401s requests coming from the
    **Good move**, **Book move**, **Inaccuracy ?!**, **Mistake ?**,
    **Blunder ??**. Includes a `?` "clarify" button that expands to show
    the raw delta, e.g. `Eval (from mover): +0.20 -> -1.50 (Δ -1.70)`.
-5. **Opening section** (only during the first ~24 plies): opening name,
-   ECO code, and a row of pill-shaped top theory moves (from master
-   games in the Lichess database).
-6. **Top engine lines** -- up to 3 principal variations, each with its
+5. **Opening section** (while the position is in book -- typically the
+   first 10-15 plies of mainlines): opening name, ECO code, two
+   read-more links ("Read on Wikipedia" goes to a Wikipedia search for
+   the parent opening; "Study on Lichess" deep-links to the exact FEN
+   on `lichess.org/analysis`), and a scrollable list of **named
+   continuations** -- each row shows `SAN | opening name | ECO`, so the
+   user can see e.g. `Nf3 | King's Knight Opening | C40` or
+   `c5 | Sicilian Defense | B20`. Thanks to the full-path builder the
+   list stays populated through mainline move 5+ for every major
+   opening family.
+6. **Stockfish suggests** section -- one-line plain-English advice
+   generated from the engine's top PV move, e.g.
+   *"Play Bb5 - good diagonal for the bishop. Holds a small plus
+   (+0.52)."* Hidden until the engine reports a line.
+7. **Top engine lines** -- up to 3 principal variations, each with its
    own score and the first ~8 plies in UCI notation.
-7. **Depth slider** (8 to 22) controlling Stockfish search depth.
-8. **Settings panel** (toggled via the gear):
+8. **Depth slider** (8 to 22) controlling Stockfish search depth.
+9. **Settings panel** (toggled via the gear):
     - Theme: **Dark / Light**
     - Size: **Small (280px) / Medium (340px) / Large (480px)**
 
@@ -67,14 +85,15 @@ explicitly.
 ChessMate/
 ├── manifest.json                   MV3 manifest
 ├── background.js                   Service worker; toolbar icon -> toggle
-├── package.json / package-lock.json  npm (only used to pull Stockfish)
+├── package.json / package-lock.json  npm (Stockfish + chess.js devDep)
 ├── .gitignore                      ignores node_modules, .DS_Store, *.zip
 ├── README.md                       User-facing install + usage
 ├── CONTEXT.md                      This file
 ├── content/
-│   ├── board-reader.js             DOM -> FEN extraction
+│   ├── board-reader.js             DOM -> FEN extraction (also exposes grid)
 │   ├── analysis-labels.js          pure helpers: assessPosition + classifyMove
-│   ├── opening-book.js             Lichess Opening Explorer client (cached)
+│   ├── opening-book.js             offline ECO DB client
+│   ├── engine-hints.js             describeMove(): UCI/SAN -> human sentence
 │   ├── overlay.js                  Shadow-DOM panel (theme + size aware)
 │   ├── overlay.css                 stub (all styles live in Shadow DOM)
 │   └── content.js                  controller: poll loop + orchestration
@@ -82,14 +101,18 @@ ChessMate/
 │   ├── stockfish.js                Stockfish 18 Lite single-thread loader (~20KB)
 │   ├── stockfish.wasm              Stockfish WASM binary (~7MB)
 │   └── stockfish-worker.js         UCI handshake + info parser (Blob-worker)
+├── data/
+│   └── openings.json               pre-built ECO DB (~2.0 MB) -- names + children
+├── scripts/
+│   └── build-openings.mjs          one-shot builder (node, uses chess.js)
 ├── icons/
 │   ├── icon16.png / icon48.png / icon128.png
 │   └── make_icons.py               placeholder icon generator (stdlib)
 └── node_modules/                   gitignored; source of engine/stockfish.*
 ```
 
-Total extension bundle size: approximately 7.4 MB (dominated by the WASM
-binary).
+Total extension bundle size: approximately 9.5 MB (7 MB WASM binary +
+~2 MB openings DB).
 
 ---
 
@@ -110,7 +133,8 @@ binary).
 │  │                          │<──────── (Blob: Worker -> wasm)   │    │
 │  └──┬──┬────────────────────┘  info     └────────────────────────┘   │
 │     │  │  fen                                                        │
-│     │  └──────> opening-book.js ──fetch──> explorer.lichess.ovh      │
+│     │  └──────> opening-book.js ──fetch──> data/openings.json        │
+│     │                     (offline ECO DB, 3.7k entries)             │
 │     │                                                                │
 │     │ assessPosition / classifyMove (pure fn in analysis-labels.js)  │
 │     ▼                                                                │
@@ -139,8 +163,11 @@ binary).
   loader via the URL hash fragment.
 - **Shadow DOM** overlay so chess.com's CSS can't bleed into our panel
   and vice-versa.
-- **Lichess for opening theory** instead of bundling a book. The Masters
-  DB is high quality, cache-friendly, and keeps the extension small.
+- **Bundled ECO database** (`data/openings.json`, ~965 KB) instead of
+  hitting the Lichess Opening Explorer. Zero network, works offline,
+  no 401s, no rate limits. The file is built ahead of time by
+  `scripts/build-openings.mjs` from the public
+  `lichess-org/chess-openings` dataset (CC0).
 
 ---
 
@@ -156,28 +183,25 @@ Manifest V3. Declares:
   1. `content/board-reader.js`    -> `window.ChessMateBoardReader`
   2. `content/analysis-labels.js` -> `window.ChessMateLabels`
   3. `content/opening-book.js`    -> `window.ChessMateOpeningBook`
-  4. `engine/stockfish-worker.js` -> `window.ChessMateEngine`
-  5. `content/overlay.js`         -> `window.ChessMateOverlay`
-  6. `content/content.js`         -> controller
-- `web_accessible_resources`: `engine/stockfish.js` and `engine/stockfish.wasm`.
-- `host_permissions`: `https://www.chess.com/*` and
-  `https://explorer.lichess.ovh/*` (opening book).
+  4. `content/engine-hints.js`    -> `window.ChessMateEngineHints`
+  5. `engine/stockfish-worker.js` -> `window.ChessMateEngine`
+  6. `content/overlay.js`         -> `window.ChessMateOverlay`
+  7. `content/content.js`         -> controller
+- `web_accessible_resources`: `engine/stockfish.js`,
+  `engine/stockfish.wasm`, and `data/openings.json`.
+- `host_permissions`: `https://www.chess.com/*` only. All opening data
+  is offline and Wikipedia/Lichess read-more links open in a new tab
+  (no extension-side fetches needed).
 - `permissions`: only `storage`.
 - `background.service_worker`: `background.js`.
 - `action`: toolbar button (icon only, no popup).
 
 ### `background.js`
 
-MV3 service worker. Two responsibilities:
-
-- Logs installation; listens for toolbar icon clicks
-  (`chrome.action.onClicked`) and sends a `{ type: "chessmate:toggle" }`
-  message to the active tab's content script.
-- Proxies opening-book fetches. When a content script sends
-  `{ type: "chessmate:opening", fen }`, the worker fetches
-  `https://explorer.lichess.ovh/masters?fen=...` from the extension
-  origin (avoiding the 401s Lichess returns for requests from
-  `https://www.chess.com`) and replies with `{ ok, data }`.
+Tiny MV3 service worker. Logs installation; listens for toolbar icon
+clicks (`chrome.action.onClicked`) and sends a
+`{ type: "chessmate:toggle" }` message to the active tab's content
+script. No network access.
 
 ### `content/board-reader.js`
 
@@ -222,15 +246,90 @@ MV3 service worker. Two responsibilities:
 
 ### `content/opening-book.js`
 
-`window.ChessMateOpeningBook` with:
+`window.ChessMateOpeningBook`. Pure offline lookup against the bundled
+ECO database.
 
-- `lookup(fen)` -> `Promise<{ name, eco, moves[] } | null>`. Sends a
-  `{ type: "chessmate:opening", fen }` runtime message to the background
-  service worker, which performs the actual Lichess fetch from the
-  extension origin. Each `moves[i]` is `{ san, uci, total, winRate, drawRate }`.
-  In-memory LRU-style cache (max 256 entries) keyed by FEN.
-- `isEarly(plyCount)` -> true for the first 24 plies; used by the
-  controller to skip API calls once the game is past the opening phase.
+- On first call (or at script load) lazily fetches
+  `chrome.runtime.getURL("data/openings.json")` and parses it. The DB
+  has two tables:
+    - `names : { [epd]: { eco, name } }` (7601 entries -- every
+      terminal position of an ECO entry plus every intermediate
+      position on its PGN path that nobody else claims with a more
+      specific name).
+    - `nextByEpd : { [parentEpd]: [{ move, san, eco, name }, ...] }`
+      (5290 parent positions, 7789 total continuation pointers -- one
+      per distinct `(parent, move)` pair encountered along any opening
+      path. The child's displayed `name`/`eco` come from `names[childEpd]`
+      so the two tables are always consistent.)
+- `lookup(fen)` -> `Promise<{ name, eco, moves[] } | null>`. Computes
+  the EPD from the FEN (first 4 fields), then returns the current
+  position's name (if any) plus the list of named continuations sorted
+  by a hand-picked `POPULAR_FAMILIES` priority list first, then ECO.
+  So after `1. e4` the list opens with Sicilian / French / Caro-Kann /
+  Scandinavian / Alekhine, not Barnes / Borg / Carr.
+  Each `moves[i]` is `{ san, uci, eco, name, popular }`.
+- `isEarly(plyCount)` -> true for the first 40 plies (i.e. through
+  move 20); used by the controller to skip the lookup once the game is
+  past the opening phase. The underlying DB runs out well before that,
+  so this is mostly a micro-optimisation.
+
+### `content/engine-hints.js`
+
+`window.ChessMateEngineHints.describeMove({ san, mover, currScoreCp,
+currScoreMate, inBook })` -> string.
+
+Pure helper. Parses the SAN (produced by `content.js` via a small
+UCI->pseudo-SAN converter that uses the live piece grid) and emits a
+one-line sentence built from:
+
+- **Action clause** -- "push to e4", "knight to f3", "bishop takes on
+  c6", "castle short", "promote on e8".
+- **Thematic clause(s)** -- good knight/bishop development squares,
+  fights-for-the-centre, claims-centre-space, active queen warning,
+  check / checkmate / promotion flags.
+- **Eval clause** -- "retains a small plus (+0.52)", "keeps the
+  balance (-0.10)", "forces mate in 3", etc. Uses White-positive cp
+  but speaks from the mover's perspective.
+- **Book prefix** -- "Book move: ..." when the resulting position is
+  in our offline ECO database.
+
+Intentionally approximate: we don't disambiguate (e.g. we'll say
+"Nc3" even if two knights could go there) and we don't probe deeper
+tactics. The section is advisory, a companion to the top engine lines.
+
+### `data/openings.json`
+
+Pre-built from `scripts/build-openings.mjs`. Structure:
+
+```
+{
+  "version": 1,
+  "source": "lichess-org/chess-openings (CC0)",
+  "generatedAt": "...",
+  "totalEntries": 3690,
+  "names":     { "<epd>": { "eco", "name" }, ... },
+  "nextByEpd": { "<epd>": [ { "move", "san", "eco", "name" } ], ... }
+}
+```
+
+EPD here is the first four fields of a FEN:
+`board turn castling en_passant` (no move clocks).
+
+### `scripts/build-openings.mjs`
+
+Developer-only Node script; run with `npm run build:openings`. Fetches
+five TSVs from the `lichess-org/chess-openings` repo, parses each row
+(`eco`, `name`, `pgn`), replays the SAN tokens with `chess.js`, and
+populates the two indices above.
+
+- `names`: "most specific name wins" when multiple entries share an EPD.
+- `nextByEpd[parent]`: one entry per `(parent, move)` pair, sorted by
+  ECO for deterministic output.
+- Output path: `data/openings.json` (~965 KB raw, well under 200 KB
+  gzipped).
+
+`chess.js` is pulled in as a `devDependency` only; it is never loaded
+by the extension at runtime.
 
 ### `engine/stockfish-worker.js`
 
@@ -266,7 +365,10 @@ Runtime:
     - `setLastMove({ label, badge, severity, detail })` -- the
       `detail` string powers the popover shown when the user clicks the
       round `?` "clarify" button next to the move label.
-    - `setOpening({ name, eco, moves })`
+    - `setOpening({ name, eco, moves, fen })` -- `fen` powers the
+      "Study on Lichess" deep-link for the current position.
+    - `setEngineHint({ text, source })` -- the "Stockfish suggests"
+      section; pass `null` to hide it.
     - `setEvaluation({ scoreCp, scoreMate, depth, lines, turn, playerColor })`
       -- when `playerColor === "b"` the eval bar is flipped via
       `transform: scaleY(-1)` so the player's color sits at the bottom,
@@ -338,12 +440,11 @@ so no move-quality label is shown until after the first move.
 ## 5. Messaging surface
 
 - **content <- background**: `{ type: "chessmate:toggle" }`.
-- **content -> background**: `{ type: "chessmate:opening", fen }`,
-  reply `{ ok: bool, data?: lichessPayload, error?: string }`.
-- **background -> Lichess**: `GET https://explorer.lichess.ovh/masters?fen=...`
-  with `credentials: "omit"` and the extension origin.
 - **content -> worker**: UCI commands via `worker.postMessage(cmd)`.
 - **worker -> content**: UCI output via `worker.onmessage`.
+- **content fetch from extension origin**:
+    - `chrome-extension://<id>/engine/stockfish.js` (as text, for the Blob worker)
+    - `chrome-extension://<id>/data/openings.json`  (the ECO DB)
 - **content <-> storage**: `chrome.storage.local["chessmate.settings"] =
   { enabled, depth, theme, size }`.
 
@@ -358,6 +459,8 @@ so no move-quality label is shown until after the first move.
   If rebuilding from scratch, run `npm install` once and copy
   `node_modules/stockfish/bin/stockfish-18-lite-single.{js,wasm}`
   to `engine/stockfish.{js,wasm}`.
+- `data/openings.json` present in the repo (committed). To regenerate
+  from the upstream Lichess dataset, run `npm run build:openings`.
 
 ### Install unpacked
 
@@ -391,15 +494,18 @@ so no move-quality label is shown until after the first move.
 
 - **Stockfish 18 Lite single-threaded** (GPL-3.0).
 
-### Runtime (network, optional)
+### Runtime (bundled, offline)
 
-- **Lichess Opening Explorer** `https://explorer.lichess.ovh/masters`.
-  If the user is offline or the endpoint fails, the opening section
-  simply stays hidden; the engine continues to work.
+- **lichess-org/chess-openings** (CC0) -- the ECO dataset, re-packaged
+  into `data/openings.json` by the build script. No runtime dependency
+  on lichess.org; the data lives inside the extension.
 
 ### Development
 
-- **npm** -- only used to pull Stockfish; not used for bundling.
+- **npm** -- pulls Stockfish and `chess.js` (devDependency for the
+  build script only).
+- **node >= 18** -- for `npm run build:openings` (uses the builtin
+  `fetch`).
 - **python3** -- only used by `icons/make_icons.py` (stdlib only).
 
 No bundler, no transpiler, no framework. Plain ES2019+ JS.
@@ -423,10 +529,12 @@ No bundler, no transpiler, no framework. Plain ES2019+ JS.
   so we poll at 500 ms instead.
 - **chess.com UI changes**: all DOM selectors live in `content/board-reader.js`
   so fixes are single-file.
-- **Lichess opening DB is masters-only**: positions that never appeared
-  in master games return no opening, even if they're from popular
-  amateur theory. Switching to the `lichess` database (a different
-  endpoint) is trivial if you prefer broader coverage.
+- **Popularity sorting is subjective**: continuations are sorted by a
+  hand-picked priority list in `content/opening-book.js`
+  (`POPULAR_FAMILIES`). Openings whose name starts with a known family
+  ("Sicilian Defense", "Italian Game", "Ruy Lopez", ...) bubble to the
+  top; everything else falls to an "other" bucket sorted by ECO. Tweak
+  the list to taste.
 - **No SAN in engine lines**: the 3 top engine lines use UCI coordinate
   notation (`e2e4`). A small FEN+UCI-to-SAN converter would fix this.
 
@@ -456,11 +564,23 @@ No bundler, no transpiler, no framework. Plain ES2019+ JS.
    - Switch to Small (280) / Medium (340) / Large (480) -> panel width,
      font size, and bar height scale together.
    - Re-load the page -> preferences persist.
-8. Opening pills:
-   - In `/analysis` from the starting position, expect the opening
-     section to appear after ~1-2 moves (no 401s in the console).
-   - Open DevTools -> Network tab: the `explorer.lichess.ovh` requests
-     should come from the **service worker**, not the page.
+8. Opening section:
+   - In `/analysis` from the starting position, the list opens with
+     `e4 | King's Pawn Game`, `d4 | Queen's Pawn Game`, `c4 | English
+     Opening` at the top (not Barnes / Grob / Polish).
+   - Play `1. e4`: the list becomes Black's options headed by
+     `c5 | Sicilian Defense`, `e6 | French Defense`, `c6 | Caro-Kann`,
+     `d5 | Scandinavian`, `Nf6 | Alekhine`, ...
+   - Play through `1. e4 e5 2. Nf3 Nc6 3. d4`: the panel title should
+     read `Scotch Game (C44)`, with continuations `exd4` and `Nxd4`
+     below.
+   - Open DevTools console: you should see a single
+     `[ChessMate] openings DB loaded: N named positions, M parents`
+     log on first board change, and one
+     `[ChessMate] opening lookup: ... continuations` per move played.
+   - Open DevTools -> Network tab: the only `chrome-extension://`
+     fetches should be `engine/stockfish.js` (once) and
+     `data/openings.json` (once).
 9. Toggle OFF -> score clears, engine worker is terminated (check the
    Chrome DevTools Memory tab).
 
@@ -474,10 +594,13 @@ No bundler, no transpiler, no framework. Plain ES2019+ JS.
 - **Chess.com move-list parsing** to reliably determine side-to-move,
   castling rights, en-passant target, and move number instead of
   relying on heuristics.
-- **Lichess opening DB option** in settings (masters-only vs
-  wider lichess DB).
-- **Show theory move popularity bars** with actual win/draw/loss
-  percentages in the opening pills.
+- **Optional online popularity booster**: re-enable the Lichess
+  proxy (already prototyped in git history) as a secondary overlay
+  showing master game counts next to each named continuation.
+- **Popularity data** per continuation. Right now continuations are
+  hand-sorted by family; a master-games popularity count per move
+  (from a one-time dump) would give us the same effect more uniformly
+  and let us surface win/draw/loss stats per move.
 - **Options page** exposing MultiPV count (1/2/3/5), search mode
   (depth vs time), engine variant (lite vs full when we figure out
   COOP/COEP in extension origin).
