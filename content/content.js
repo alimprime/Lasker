@@ -1621,7 +1621,18 @@
     if (state.review && state.review.status === "idle") refreshIdleCard();
   }
 
-  function setTheme(t) { state.settings.theme = t; saveSettings(state.settings); }
+  function syncBoardArrowPalette() {
+    try {
+      if (!window.LaskerBoardArrows || !window.LaskerOverlay || !window.LaskerOverlay.getArrowPalette) return;
+      window.LaskerBoardArrows.setPalette(window.LaskerOverlay.getArrowPalette());
+    } catch (_e) {}
+  }
+
+  function setTheme(t) {
+    state.settings.theme = t;
+    saveSettings(state.settings);
+    syncBoardArrowPalette();
+  }
   function setSize(s) { state.settings.size = s; saveSettings(state.settings); }
   function setCollapsed(c) { state.settings.collapsed = !!c; saveSettings(state.settings); }
   function setMode(m) {
@@ -1958,6 +1969,7 @@
         const boardEl = window.LaskerBoardReader.findBoard();
         if (boardEl) window.LaskerBoardArrows.setBoard(boardEl);
         window.LaskerBoardArrows.setVisible(!!state.settings.showArrows);
+        syncBoardArrowPalette();
       } catch (err) { log("arrows mount failed:", err); }
     }
 

@@ -37,16 +37,20 @@
   const SVG_NS = "http://www.w3.org/2000/svg";
   const HOST_ID = "lasker-arrows-host";
 
-  // Arrow visual presets keyed by "kind".
-  //   my    -- solid accent-green. The primary "play this" arrow.
-  //   reply -- dashed amber. The predicted opponent reply.
-  //   next  -- solid teal. Your follow-up after the predicted reply.
+  // Arrow geometry + opacity per kind. Colours come from setPalette() so they
+  // track the overlay theme (accent + severity tokens from overlay.js).
   const STYLES = {
-    my:    { color: "#3ea966", width: 0.14, opacity: 0.95, dash: null, glow: true },
-    reply: { color: "#e0b441", width: 0.11, opacity: 0.85, dash: "0.22 0.16", glow: false },
-    next:  { color: "#26a3a3", width: 0.11, opacity: 0.85, dash: null, glow: false },
-    // "hint" is a muted single-move preview (not part of a plan).
-    hint:  { color: "#8aa4d8", width: 0.11, opacity: 0.85, dash: null, glow: false },
+    my:    { width: 0.14, opacity: 0.95, dash: null, glow: true },
+    reply: { width: 0.11, opacity: 0.85, dash: "0.22 0.16", glow: false },
+    next:  { width: 0.11, opacity: 0.85, dash: null, glow: false },
+    hint:  { width: 0.11, opacity: 0.85, dash: null, glow: false },
+  };
+
+  const DEFAULT_PALETTE = {
+    my: "#3ea966",
+    reply: "#e0b441",
+    next: "#26a3a3",
+    hint: "#8aa4d8",
   };
 
   class BoardArrows {
@@ -65,6 +69,40 @@
         onResize: () => this._reposition(),
         onScroll: () => this._reposition(),
       };
+      this._palette = { ...DEFAULT_PALETTE };
+    }
+
+    _colorForKind(kind) {
+      const p = this._palette;
+      if (kind === "reply") return p.reply;
+      if (kind === "next") return p.next;
+      if (kind === "hint") return p.hint;
+      return p.my;
+    }
+
+    /** Sync stroke colours with LaskerOverlay.getArrowPalette() (theme-aware). */
+    setPalette(partial) {
+      if (!partial || typeof partial !== "object") return;
+      if (partial.my) this._palette.my = partial.my;
+      if (partial.reply) this._palette.reply = partial.reply;
+      if (partial.next) this._palette.next = partial.next;
+      if (partial.hint) this._palette.hint = partial.hint;
+      if (this.defs) this._refreshMarkers();
+      this._redraw();
+    }
+
+    _refreshMarkers() {
+      if (!this.defs) return;
+      for (const kind of Object.keys(STYLES)) {
+        const id = `lasker-arrowhead-${kind}`;
+        const m = this.defs.querySelector(`#${id}`);
+        if (!m) continue;
+        const path = m.querySelector("path");
+        if (!path) continue;
+        const s = STYLES[kind];
+        path.setAttribute("fill", this._colorForKind(kind));
+        path.setAttribute("opacity", String(s.opacity));
+      }
     }
 
     mount() {
@@ -128,7 +166,7 @@
         m.setAttribute("orient", "auto");
         const p = document.createElementNS(SVG_NS, "path");
         p.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
-        p.setAttribute("fill", s.color);
+        p.setAttribute("fill", this._colorForKind(kind));
         p.setAttribute("opacity", String(s.opacity));
         m.appendChild(p);
         defs.appendChild(m);
@@ -256,6 +294,7 @@
       if (!from || !to) return;
 
       const style = STYLES[kind] || STYLES.my;
+      const strokeColor = this._colorForKind(kind);
 
       // Highlight source square with a rounded-rect glow so the player
       // knows which piece to pick up.
@@ -267,7 +306,7 @@
       src.setAttribute("rx", "0.12");
       src.setAttribute("ry", "0.12");
       src.setAttribute("fill", "none");
-      src.setAttribute("stroke", style.color);
+      src.setAttribute("stroke", strokeColor);
       src.setAttribute("stroke-width", "0.06");
       src.setAttribute("opacity", String(style.opacity * 0.85));
       if (isCurrent && style.glow) {
@@ -294,7 +333,7 @@
       line.setAttribute("y1", String(from.y));
       line.setAttribute("x2", String(endX));
       line.setAttribute("y2", String(endY));
-      line.setAttribute("stroke", style.color);
+      line.setAttribute("stroke", strokeColor);
       line.setAttribute("stroke-width", String(style.width));
       line.setAttribute("stroke-linecap", "round");
       line.setAttribute("opacity", String(style.opacity));
