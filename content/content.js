@@ -100,31 +100,52 @@
 
   function log(...args) { console.log("[Lasker]", ...args); }
 
-  // Extra review/nav logs: in DevTools console run
-  //   localStorage.setItem("laskerReviewDebug","1")
-  // then reload chess.com (disable with removeItem).
+  // ---------------------------------------------------------------------------
+  // Review / nav debugging for humans + coding agents. One console filter:
+  //   [Lasker/debug]
+  // (Uses raw console.log, not the log() helper, when reviewVerbose() is true.)
+  // **On by default.** To silence (then reload the chess.com tab):
+  //   localStorage.setItem("laskerReviewDebug", "0")
+  // To turn back on:
+  //   localStorage.removeItem("laskerReviewDebug")
+  // Payload shape: { domain, event, t, ... } — `domain` groups the subsystems;
+  // `event` is the action name; the rest is explicit context for cache/board bugs.
+  // ---------------------------------------------------------------------------
   function reviewVerbose() {
     try {
-      return typeof localStorage !== "undefined"
-        && localStorage.getItem("laskerReviewDebug") === "1";
+      if (typeof localStorage === "undefined") return true;
+      const v = localStorage.getItem("laskerReviewDebug");
+      if (v === "0" || v === "false") return false;
+      return true;
     } catch (_e) {
-      return false;
+      return true;
     }
   }
 
-  /** Structured diagnostics for cache misses & navigation (prefix [Lasker/review]). */
-  function logReview(tag, payload) {
-    try {
-      if (payload !== undefined && payload !== null && typeof payload === "object") {
-        console.log("[Lasker/review]", tag, payload);
-      } else if (payload !== undefined) {
-        console.log("[Lasker/review]", tag, payload);
-      } else {
-        console.log("[Lasker/review]", tag);
-      }
-    } catch (_e) {
-      console.log("[Lasker/review]", tag, payload);
+  /** One cache ply as an agent-readable snapshot (hash prefix correlates with board-reader). */
+  function plySnapshotForDebug(r, plyIndex) {
+    if (!r || !Array.isArray(r.plies)) {
+      return { _error: "no_review_plies", requestedPly: plyIndex };
     }
+    if (plyIndex < 0 || plyIndex >= r.plies.length) {
+      return {
+        _outOfRange: true,
+        requestedPly: plyIndex,
+        pliesLength: r.plies.length,
+        maxPly: r.plies.length - 1,
+      };
+    }
+    const e = r.plies[plyIndex];
+    const h = (e.hash && String(e.hash)) || "";
+    return {
+      ply: plyIndex,
+      lastMoveSan: plyIndex > 0 ? (e.lastSan != null ? String(e.lastSan) : null) : null,
+      sideToMove: e.turn || null,
+      cacheHash12: h ? h.slice(0, 12) : null,
+      label: plyIndex === 0
+        ? "start"
+        : (e.lastSan && String(e.lastSan)) || `index_${plyIndex}`,
+    };
   }
 
   // After reloading the extension in chrome://extensions, this tab may still
@@ -660,6 +681,19 @@
     let nextIdx = idx + delta;
     nextIdx = Math.max(0, Math.min(plies.length - 1, nextIdx));
     const mistakePly = plies[nextIdx];
+    if (reviewVerbose()) {
+      const ev = delta < 0 ? "previous" : "next";
+      console.log("[Lasker/debug]", {
+        domain: "mistakeTour",
+        event: ev,
+        t: Date.now(),
+        tourDirection: ev,
+        indexAmongFlagged: nextIdx,
+        totalFlagged: plies.length,
+        targetMistakePly: mistakePly,
+        note: "Jumps board to the mistake post-move ply; calls jumpToPly (same as mist list row).",
+      });
+    }
     showMistakeLessonOnly(mistakePly);
     await jumpToPly(mistakePly);
   }
@@ -834,6 +868,7 @@
         plyAfter,
         mover: entry.mover,
         moveLabel: `${dotText} ${entry.lastSan || ""}`.trim(),
+        lastSan: entry.lastSan || "",
         severity: c.severity,
         badge: c.badge || "",
         label: c.label,
@@ -1052,14 +1087,24 @@
       state.review.abortCtrl = null;
       state.review.replayMeta = review.replayMeta || null;
       if (review.replayMeta && review.replayMeta.stopped) {
-        logReview("replay shorter than DOM move list — review will go stale past expanded plies", {
+        const replayShort = {
           domSansRead: sans.length,
           replayedSans: review.replayMeta.replayedMoves,
           stopIndex: review.replayMeta.stopIndex,
           stopSan: review.replayMeta.stopSan,
           stopReason: review.replayMeta.stopReason,
           cachedPositions: Array.isArray(review.plies) ? review.plies.length : 0,
-        });
+        };
+        console.log("[Lasker/review]", "replay shorter than DOM move list — review will go stale past expanded plies", replayShort);
+        if (reviewVerbose()) {
+          console.log("[Lasker/debug]", {
+            domain: "reviewCache",
+            event: "replayShorterThanDom",
+            t: Date.now(),
+            meaning: "Batch expandLineWithFens stopped before full SAN list; stepping past end drifts from cache.",
+            ...replayShort,
+          });
+        }
       }
 
       rebuildTallyFromReview();
@@ -1137,18 +1182,52 @@
   async function jumpToPly(plyOrZero) {
     const r = state.review;
     if (!r || r.status !== "ready" || !Array.isArray(r.plies) || r.plies.length === 0) {
-      log("jumpToPly: review not ready");
+      console.log("[Lasker]", "jumpToPly: review not ready");
+      if (reviewVerbose()) {
+        console.log("[Lasker/debug]", {
+          domain: "jumpToPly",
+          event: "rejected",
+          t: Date.now(),
+          reason: "review_not_ready",
+          status: r && r.status,
+          hasPlies: !!(r && Array.isArray(r.plies) && r.plies.length),
+        });
+      }
       return;
     }
     const maxP = r.plies.length - 1;
     const target = Math.max(0, Math.min(maxP, Number(plyOrZero) || 0));
     const reader = window.LaskerMoveListReader;
-    if (!reader || !reader.goToPly) return;
+    if (!reader || !reader.goToPly) {
+      if (reviewVerbose()) {
+        console.log("[Lasker/debug]", {
+          domain: "jumpToPly",
+          event: "rejected",
+          t: Date.now(),
+          reason: "no_move_list_reader",
+          hasReader: !!reader,
+          hasGoToPly: !!(reader && reader.goToPly),
+          requestedPly: target,
+        });
+      }
+      return;
+    }
 
     const fromPly = inferCurrentReviewPly(r);
     const diff = target - fromPly;
 
     if (diff === 0) {
+      if (reviewVerbose()) {
+        console.log("[Lasker/debug]", {
+          domain: "jumpToPly",
+          event: "alreadyAtTarget",
+          t: Date.now(),
+          requestedTargetPly: target,
+          inferredLiveBoardPly: fromPly,
+          maxPly: maxP,
+          note: "No chess.com board steps run; only tickPoll refresh.",
+        });
+      }
       try {
         tickPoll(true);
       } catch (_err) {}
@@ -1156,12 +1235,18 @@
     }
 
     if (reviewVerbose()) {
-      logReview("jumpToPly.request", {
-        target,
-        fromPly,
-        diff,
-        maxP,
-        strategy: Math.abs(diff) <= 28 ? "relative-steps" : "absolute-goToPly",
+      console.log("[Lasker/debug]", {
+        domain: "jumpToPly",
+        event: "request",
+        t: Date.now(),
+        requestedClampedPly: target,
+        inferredLiveBoardPlyBefore: fromPly,
+        stepDelta: diff,
+        maxPly: maxP,
+        navigationStrategy: Math.abs(diff) <= 28 ? "relative-steps" : "absolute-goToPly",
+        stepsOrGoTo: Math.abs(diff) <= 28
+          ? { relativeSteps: diff }
+          : { absoluteGoToPly: true },
       });
     }
 
@@ -1188,10 +1273,20 @@
       const alignBudget = Math.min(12000, 3200 + Math.abs(diff) * 130);
       const aligned = await waitForBoardAligned(target, alignBudget);
       if (reviewVerbose()) {
-        logReview("jumpToPly.align", { target, aligned });
+        console.log("[Lasker/debug]", {
+          domain: "jumpToPly",
+          event: "align",
+          t: Date.now(),
+          targetPly: target,
+          waitForBoardAligned: aligned,
+          ifFalseBoardMayDesync: !aligned
+            ? "Live board hash did not match cache row within budget — see stale/overlay mismatch bugs."
+            : null,
+          expectedPlyAtHash: plySnapshotForDebug(r, target),
+        });
       }
     } catch (err) {
-      log("jumpToPly failed:", err);
+      console.log("[Lasker]", "jumpToPly failed:", err);
     }
 
     try {
@@ -1206,6 +1301,22 @@
     const maxP = r.plies.length - 1;
     const fromPly = inferCurrentReviewPly(r);
     const next = Math.max(0, Math.min(maxP, fromPly + delta));
+    const dir = delta < 0 ? "prev" : "next";
+    if (reviewVerbose()) {
+      console.log("[Lasker/debug]", {
+        domain: "reviewBar",
+        event: dir,
+        t: Date.now(),
+        uiControl: dir,
+        inferredLivePlyBeforeClick: fromPly,
+        clampedTargetPly: next,
+        maxPly: maxP,
+        hitBoundary: next === 0 && fromPly === 0 && delta < 0
+          ? "already_at_start"
+          : (next === maxP && fromPly === maxP && delta > 0 ? "already_at_end" : null),
+        positionAfterThisJump: plySnapshotForDebug(r, next),
+      });
+    }
     jumpToPly(next);
   }
 
@@ -1214,6 +1325,19 @@
     const reader = window.LaskerMoveListReader;
     const r = state.review;
     if (!reader || !r || r.status !== "ready" || !Array.isArray(r.plies)) return;
+    const inf = inferCurrentReviewPly(r);
+    if (reviewVerbose()) {
+      console.log("[Lasker/debug]", {
+        domain: "reviewBar",
+        event: "start",
+        t: Date.now(),
+        uiControl: "start",
+        inferredLivePlyBeforeClick: inf,
+        willJumpToPly: 0,
+        maxPly: r.plies.length - 1,
+        positionAtDestination: plySnapshotForDebug(r, 0),
+      });
+    }
     r.expectedPly = 0;
     r.navGraceUntil = Date.now() + 6000;
     try {
@@ -1234,6 +1358,19 @@
       return;
     }
     const maxP = r.plies.length - 1;
+    const inf = inferCurrentReviewPly(r);
+    if (reviewVerbose()) {
+      console.log("[Lasker/debug]", {
+        domain: "reviewBar",
+        event: "end",
+        t: Date.now(),
+        uiControl: "end",
+        inferredLivePlyBeforeClick: inf,
+        willJumpToPly: maxP,
+        maxPly: maxP,
+        positionAtDestination: plySnapshotForDebug(r, maxP),
+      });
+    }
     r.expectedPly = maxP;
     r.navGraceUntil = Date.now() + 8000;
     try {
@@ -1256,6 +1393,21 @@
       clearMistakeLesson();
       const maxP = r.plies.length - 1;
       const n = Math.max(0, Math.min(maxP, Number(val) || 0));
+      const inf = inferCurrentReviewPly(r);
+      if (reviewVerbose()) {
+        console.log("[Lasker/debug]", {
+          domain: "reviewBar",
+          event: "slider",
+          t: Date.now(),
+          uiControl: "slider",
+          rawSliderValue: val,
+          inferredLivePlyBeforeCommit: inf,
+          clampedTargetPly: n,
+          maxPly: maxP,
+          positionAtDestination: plySnapshotForDebug(r, n),
+          note: "Debounced 160ms after input; compares to jumpToPly (may already match live ply).",
+        });
+      }
       jumpToPly(n);
     }, 160);
   }
@@ -1429,7 +1581,7 @@
             " but hash lookup failed — often timing/animation or castling-rights drift between DOM grid and batch FEN.";
         }
         r.cacheMissStreak = 0;
-        logReview("cache-miss -> Outside cached analysis (stale)", {
+        const stalePayload = {
           liveHashSample: (position.hash || "").slice(0, 48),
           liveBoardFen: bp,
           turnState: state.turn,
@@ -1444,8 +1596,20 @@
           batchTotalMovesField: r.totalMoves,
           replayMeta: r.replayMeta,
           hint,
-          verboseNav: "Set localStorage laskerReviewDebug=1 and reload for per-jump logs.",
+        };
+        console.log("[Lasker/review]", "cache-miss -> Outside cached analysis (stale)", {
+          ...stalePayload,
+          verboseNav: "[Lasker/debug] is on by default; set laskerReviewDebug=0 to silence.",
         });
+        if (reviewVerbose()) {
+          console.log("[Lasker/debug]", {
+            domain: "reviewCache",
+            event: "staleOffTree",
+            t: Date.now(),
+            meaning: "Live board no longer matches any cached review ply after miss streak; UI will show re-analyze.",
+            ...stalePayload,
+          });
+        }
       }
       r.navGraceUntil = 0;
       r.expectedPly = null;
@@ -1934,6 +2098,84 @@
       },
       onMistakeNavigate: (p) => {
         if (!p) return;
+        if (p.jumpKind === "before" || p.jumpKind === "after") {
+          const r = state.review;
+          const entry =
+            p.lessonPly != null && r && Array.isArray(r.plies) && r.plies[p.lessonPly]
+              ? r.plies[p.lessonPly]
+              : null;
+          const classification = entry && entry.classification;
+          const move =
+            p.moveLabel ||
+            (p.lastSan && String(p.lastSan)) ||
+            (p.lessonPly != null ? `ply ${p.lessonPly}` : null);
+          const isAfter = p.jumpKind === "after";
+          const isBefore = p.jumpKind === "before";
+          const lessonP = p.lessonPly;
+          const targetP = p.targetPly;
+          let uiContractOk = null;
+          if (isAfter && lessonP != null && targetP != null) {
+            uiContractOk = targetP === lessonP;
+          } else if (isBefore && lessonP != null && targetP != null) {
+            uiContractOk = targetP === lessonP - 1;
+          }
+          if (reviewVerbose()) {
+            console.log("[Lasker/debug]", {
+              domain: "flaggedMistakeList",
+              event: p.jumpKind,
+              t: Date.now(),
+              uiElement: p.jumpKind === "before" ? "Before button" : "After button",
+              listRow0Based: p.listIndex,
+              moveDisplay: move,
+              lastSan: p.lastSan || null,
+              classificationSeverity: classification && classification.severity,
+              whatHappens: isAfter
+                ? "After: board = position AFTER the bad move; lessonPly and board both index that cache row"
+                : "Before: board = position BEFORE the bad move; lesson still keyed to mistakePly (post-move row)",
+              argsToJumpToPly: { targetPly: targetP },
+              lessonMistakePostMovePly: lessonP,
+              invariant: {
+                after_expectBoardPlyEqualsMistakePly: isAfter
+                  ? { expected: true, held: targetP === lessonP, targetPly: targetP, lessonPly: lessonP }
+                  : null,
+                before_expectBoardPlyEqualsMistakePlyMinus1: isBefore
+                  ? {
+                      expected: lessonP != null && lessonP > 0,
+                      held: lessonP == null || lessonP === 0 ? null : targetP === lessonP - 1,
+                      targetPly: targetP,
+                      lessonPly: lessonP,
+                    }
+                  : null,
+              },
+              allInvariantsOk: uiContractOk,
+              ifInvariantFails: !uiContractOk
+                ? "Check overlay data-ply in overlay.js or chess.com goToPly / hash drift."
+                : null,
+              reviewState: r && r.status,
+              pliesInCache: r && Array.isArray(r.plies) ? r.plies.length : 0,
+              cacheAtTargetBoardPly: r ? plySnapshotForDebug(r, targetP) : null,
+              cacheAtLessonMistakePly: r && lessonP != null ? plySnapshotForDebug(r, lessonP) : null,
+            });
+          }
+        } else if (p.jumpKind === "open") {
+          const m =
+            p.moveLabel ||
+            (p.lastSan && String(p.lastSan)) ||
+            (p.lessonPly != null ? `ply ${p.lessonPly}` : null);
+          if (reviewVerbose()) {
+            console.log("[Lasker/debug]", {
+              domain: "flaggedMistakeList",
+              event: "openRow",
+              t: Date.now(),
+              uiElement: "Main row (move + label)",
+              listRow0Based: p.listIndex,
+              moveDisplay: m,
+              targetPly: p.targetPly,
+              sameAsMistakePostMove: true,
+              note: "Same as After for board ply; full lesson + jump.",
+            });
+          }
+        }
         (async () => {
           if (p.lessonPly != null) showMistakeLessonOnly(p.lessonPly);
           if (p.targetPly != null) await jumpToPly(p.targetPly);

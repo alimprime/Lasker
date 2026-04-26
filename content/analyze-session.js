@@ -359,6 +359,43 @@
         // Normalise to white's POV so downstream code can do simple
         // comparisons without juggling signs per ply.
         const white = labels.toWhitePerspective(info.scoreCp, info.scoreMate, turn);
+
+        // Targeted debug for the opening plies. chess.com shows ~+0.3 for
+        // 1.e4 and ~0.0 for 2.d4 (Center Game) -- if our pipeline reports
+        // something wildly different we need to see whether it's the FEN,
+        // the turn, the sign, or the engine's own evaluation. Default-on,
+        // matches the [Lasker/debug] stream in content.js.
+        const verboseDebug = (() => {
+          try {
+            if (typeof localStorage !== "undefined") {
+              const v = localStorage.getItem("laskerReviewDebug");
+              if (v === "0" || v === "false") return false;
+            }
+          } catch (_e) {}
+          return true;
+        })();
+        if (i <= 4 && verboseDebug) {
+          // Pull the side-to-move letter directly out of the FEN so we
+          // can compare it against `pos.turn` without trusting either.
+          const fenParts = (pos.fen || "").split(/\s+/);
+          const fenStm = fenParts[1] || null;
+          console.log("[Lasker/debug]", {
+            domain: "analyzeSession",
+            event: "plyEval",
+            t: Date.now(),
+            ply: i,
+            lastSan: pos.lastSan,
+            mover: pos.mover,
+            sideToMoveInCache: turn,
+            fenSideToMove: fenStm,
+            turnFenAgree: turn === fenStm,
+            fenSentToEngine: pos.fen,
+            engineRaw: { scoreCp: info.scoreCp, scoreMate: info.scoreMate, depth: info.depth },
+            whiteNormalised: { whiteCp: white.cp, whiteMate: white.mate },
+            bestUci: info.bestUci || null,
+            note: "If turnFenAgree=false the white-perspective sign will be inverted.",
+          });
+        }
         // Decode the engine line from the position being analyzed (`grid` ==
         // `fromGrid` in normal paths; `grid` is authoritative for UCI→SAN).
         const bestSan = info.bestUci ? uciToPseudoSan(info.bestUci, pos.grid) : null;
@@ -392,9 +429,56 @@
             inBook,
           });
 
+          // Mirror the eval probe above with the inputs and output of
+          // classifyMove, so a misclassification is traceable to either
+          // a bad delta or a bad threshold without re-deriving anything.
+          if (i <= 4 && verboseDebug) {
+            console.log("[Lasker/debug]", {
+              domain: "analyzeSession",
+              event: "plyClassify",
+              t: Date.now(),
+              ply: i,
+              lastSan: pos.lastSan,
+              mover: pos.mover,
+              inBook,
+              prevWhiteCp: prev.whiteCp,
+              prevWhiteMate: prev.whiteMate,
+              currWhiteCp: white.cp,
+              currWhiteMate: white.mate,
+              moverSign: pos.mover === "w" ? "+1" : "-1",
+              deltaMoverPawns:
+                prev.whiteCp !== null && prev.whiteCp !== undefined &&
+                white.cp !== null && white.cp !== undefined
+                  ? ((white.cp - prev.whiteCp) * (pos.mover === "w" ? 1 : -1)) / 100
+                  : null,
+              classification: classification && {
+                label: classification.label,
+                badge: classification.badge,
+                severity: classification.severity,
+              },
+              note: "deltaMoverPawns < 0 = mover lost ground (their POV).",
+            });
+          }
+
+          // First full move of the game (1.e4, 1.d4, …): the eval swing from
+          // the initial position is often engine noise at fixed batch depth,
+          // so sound openers can be mislabeled as blunders. Never treat the
+          // first move as inaccuracy / mistake / blunder in the review cache.
+          if (i === 1 && classification) {
+            const s = classification.severity;
+            if (s === "inaccuracy" || s === "mistake" || s === "blunder") {
+              classification = {
+                ...classification,
+                label: inBook ? "Book move" : "Good move",
+                badge: "",
+                severity: inBook ? "book" : "good",
+              };
+            }
+          }
+
           // 0.10.0 "Best was X -- missed Y" enrichment, using the prev
           // position's best move.
-          if (classification && prev.bestSan && !inBook) {
+          if (classification && prev.bestSan && !inBook && i !== 1) {
             const moverSign = pos.mover === "w" ? 1 : -1;
             let missedPawns = null;
             if (prev.whiteCp !== null && prev.whiteCp !== undefined &&

@@ -1364,6 +1364,32 @@ with whatever depth was reached.
   Lasker card.
 - Reload the chess.com tab.
 
+### Review / navigation debug (devs + coding agents)
+
+Structured console logs for post-batch **review navigation** (flagged-moves
+Before/After, review bar, `jumpToPly`, mistake tour, stale cache). **Not**
+telemetry; DevTools only.
+
+1. **`[Lasker/debug]` is on by default** on chess.com (no setup). To **silence** it,
+   run `localStorage.setItem("laskerReviewDebug", "0")` then **reload** the tab.
+   Re-enable: `localStorage.removeItem("laskerReviewDebug")` and reload.
+2. In DevTools **Console**, filter by **`[Lasker/debug]`**. Each line is one
+   object: `{ domain, event, t, ... }`.
+
+| `domain` | What it covers |
+|----------|------------------|
+| `flaggedMistakeList` | Before / After / main row in “All flagged moves” |
+| `reviewBar` | Start, prev, next, end, slider |
+| `jumpToPly` | Request, align, already-at-target, rejected |
+| `mistakeTour` | Previous / Next in the lesson tour |
+| `reviewCache` | Short replay vs DOM, or **stale** (off-tree board) |
+
+Implementation: direct `console.log("[Lasker/debug]", { domain, event, t, … })`
+when `reviewVerbose()` is true (default; opt out with `laskerReviewDebug=0`), plus
+`plySnapshotForDebug` in `content/content.js` (near `reviewVerbose()`). Cache-miss
+**always** still uses `console.log("[Lasker/review]", …)`; the debug stream also
+logs `domain: reviewCache` for that path when verbose is on.
+
 ---
 
 ## 7. Dependencies
@@ -1401,8 +1427,11 @@ No bundler, no transpiler, no framework. Plain ES2019+ JS.
   Stockfish rarely needs these for correct evaluation.
 - **Side-to-move** is heuristic -- flipped on every detected board
   change. Toggle OFF/ON to re-seed from piece counts.
-- **Move quality on first move of a session** is not labeled (no prior
-  eval to compare against).
+- **First full move of the game (1.e4, 1.d4, …)** — in the **batch** cache,
+  moves that would be labeled inaccuracy / mistake / blunder are **softened**
+  to good or book (`analyze-session.js`): engine delta from the start position
+  is too noisy at fixed depth to treat as a slip. (The old “first move of a
+  session” note referred to the pre-0.11 live engine path.)
 - **MutationObserver reliability on chess.com** is known to be flaky,
   so we poll at 500 ms instead.
 - **chess.com UI changes**: all DOM selectors live in `content/board-reader.js`
@@ -1512,3 +1541,5 @@ No bundler, no transpiler, no framework. Plain ES2019+ JS.
   `<= -50` great, `<= 20` good, else solid.
 - **Size widths**: small 240px, medium 300px, large 380px.
 - **Themes**: `THEMES` dict in `overlay.js` (dark, light).
+- **Review nav debug**: on by default; `localStorage laskerReviewDebug === "0"` silences
+  (reload tab); console filter `[Lasker/debug]`; see §6 “Review / navigation debug”.

@@ -2859,11 +2859,19 @@
             const lessonPly = jmp.dataset.lessonPly != null
               ? parseInt(jmp.dataset.lessonPly, 10)
               : null;
+            const jumpKind = jmp.dataset.mlJump;
+            const listIdx = jmp.dataset.mlIdx != null
+              ? parseInt(jmp.dataset.mlIdx, 10)
+              : null;
             if (this.handlers.onMistakeNavigate) {
               try {
                 this.handlers.onMistakeNavigate({
                   targetPly,
                   lessonPly: Number.isFinite(lessonPly) ? lessonPly : null,
+                  jumpKind: jumpKind || null,
+                  listIndex: Number.isFinite(listIdx) ? listIdx : null,
+                  moveLabel: jmp.dataset.mlLabel || null,
+                  lastSan: jmp.dataset.mlSan || null,
                 });
               } catch (_err) {}
             } else if (this.handlers.onJumpToPly) {
@@ -2875,8 +2883,20 @@
           if (main && main.dataset.ply != null) {
             const ply = parseInt(main.dataset.ply, 10);
             if (!Number.isFinite(ply)) return;
+            const mIdx = main.dataset.mlIdx != null
+              ? parseInt(main.dataset.mlIdx, 10)
+              : null;
             if (this.handlers.onMistakeNavigate) {
-              try { this.handlers.onMistakeNavigate({ targetPly: ply, lessonPly: ply }); } catch (_err) {}
+              try {
+                this.handlers.onMistakeNavigate({
+                  targetPly: ply,
+                  lessonPly: ply,
+                  jumpKind: "open",
+                  listIndex: Number.isFinite(mIdx) ? mIdx : null,
+                  moveLabel: main.dataset.mlLabel || null,
+                  lastSan: main.dataset.mlSan || null,
+                });
+              } catch (_err) {}
             } else if (this.handlers.onJumpToPly) {
               try { this.handlers.onJumpToPly(ply); } catch (_err) {}
             }
@@ -3610,7 +3630,7 @@
         return;
       }
       this.elements.mistakeList.classList.remove("hidden");
-      for (const e of entries) {
+      entries.forEach((e, listIdx) => {
         const row = document.createElement("div");
         row.className = `ml-row sev-${e.severity || "inaccuracy"}`;
         const plyAfter = e.plyAfter != null ? e.plyAfter : e.ply;
@@ -3622,12 +3642,17 @@
         const miss = e.missedText
           ? `<span class="ml-miss">${escapeHtml(e.missedText)}</span>`
           : "";
+        const rowTags = (() => {
+          const lab = escapeHtml(e.moveLabel || "");
+          const san = escapeHtml(e.lastSan != null ? e.lastSan : "");
+          return ` data-ml-idx="${listIdx}" data-ml-label="${lab}" data-ml-san="${san}"`;
+        })();
         const beforeBtn =
           plyBefore != null && Number.isFinite(plyBefore)
-            ? `<button type="button" class="ml-jump" data-ply="${plyBefore}" data-lesson-ply="${plyAfter}" title="Go to the position before this move (lesson stays on this mistake)">Before</button>`
+            ? `<button type="button" class="ml-jump" data-ml-jump="before"${rowTags} data-ply="${plyBefore}" data-lesson-ply="${plyAfter}" title="Go to the position before this move (lesson stays on this mistake)">Before</button>`
             : "";
         row.innerHTML = `
-          <button type="button" class="ml-main" data-ply="${plyAfter}"
+          <button type="button" class="ml-main"${rowTags} data-ply="${plyAfter}"
             title="Jump here and show why this move hurt">
             <span class="ml-move">${escapeHtml(e.moveLabel || "")}</span>
             <span class="ml-label">${escapeHtml(e.label || "")}</span>
@@ -3636,12 +3661,12 @@
           </button>
           <div class="ml-actions">
             ${beforeBtn}
-            <button type="button" class="ml-jump" data-ply="${plyAfter}" data-lesson-ply="${plyAfter}"
+            <button type="button" class="ml-jump" data-ml-jump="after"${rowTags} data-ply="${plyAfter}" data-lesson-ply="${plyAfter}"
               title="Jump to position after this move and show the lesson">After</button>
           </div>
         `;
         body.appendChild(row);
-      }
+      });
     }
 
     setMistakeLesson(lesson) {
