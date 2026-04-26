@@ -5,7 +5,7 @@ what LASKER is, how it's built, where every piece lives, how to run it,
 and the known limitations and next steps. Keep it up to date when you
 change the architecture.
 
-Current version: **0.11.4**
+Current stable version: **0.11.4**
 
 ---
 
