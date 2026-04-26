@@ -1,4 +1,4 @@
-# LASKER -- Project Context for agent
+# LASKER -- Project Context for agent development
 
 This document is the living "state of the project" reference. It captures
 what LASKER is, how it's built, where every piece lives, how to run it,
