@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LASKER",
   "version": "0.11.4",
-  "description": "LASKER: fair-play chess coach for chess.com. Two surfaces that don't overlap: Analyze (one-click post-game batch review -- LASKER reads the finished game's move list, runs Stockfish ply-by-ply once, caches the full per-ply review in memory, rewinds to the start, then serves instant cached feedback as you step through the board; includes a clickable mistake list that jumps the chess.com board to that ply) and Learn (curated Opening Library + directive Study mode with takeback-safe position-hash sync, engine fully off). Clean-state button wipes the review cache, timeline, study and engine in one click. Drawer leaves a 140px strip at the bottom of the viewport so chess.com's move-nav controls stay clickable. Bundled Space Grotesk typeface. Automatically disabled on live/daily games, puzzles, and anywhere else real play happens.",
+  "description": "Unlock free, deep chess analysis with Lasker. Improve your game without limits, because every player deserves a top-tier coach.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
